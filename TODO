@@ -1,6 +1,9 @@
 Stored Procedures:
 -Posts:
-Fetch Post Comments - INPUT: @postId, OUTPUT: userName ('User.name'), userHandle ('User.handle'), userImage ('Image.imageUrl'), postId ('Post.postId'), content ('Post.content'), likeCount ('COUNT(Like)'), commentCount ('COUNT(replyToPostId)'), imageUrls: [{imageUrl: 'Image.imageUrl', aspectRatio: 'PostImage.aspectRatio'}] (This should be and array of JSON data), createdOn ('Post.createdOn'), replyToPostId ('Post.replyToPostId'), isLiked ('Will need a second join to Chat.Like that also joins on userId = @userId and then checks IS NOT NULL')
+Fetch Post Comments - INPUT: @postId, OUTPUT: userName ('User.name'), userHandle ('User.handle'), userImage ('Image.imageUrl'), postId ('Post.postId'), 
+content ('Post.content'), likeCount ('COUNT(Like)'), commentCount ('COUNT(replyToPostId)'), 
+imageUrls: [{imageUrl: 'Image.imageUrl', aspectRatio: 'PostImage.aspectRatio'}] (This should be and array of JSON data), createdOn ('Post.createdOn'), 
+replyToPostId ('Post.replyToPostId'), isLiked ('Will need a second join to Chat.Like that also joins on userId = @userId and then checks IS NOT NULL')
   NOTE: ORDER BY P.postId = @postId DESC so that the very first post is the original post
 
 Update User Post - INPUT: @postId, @content, @images (IMAGE), OUTPUT: @deletedImages (the publicId of the image(s) that was replaced (if a new image was provided) (use a merge statement to delete unused images and insert new images)
@@ -12,7 +15,11 @@ Fetch all users who liked a post - INPUT: @postId, OUTPUT: userName ('User.name'
 Create a post like - INPUT: @postId, @userId, OUTPUT: none
 
 -User:
-Fetch User Profile - INPUT: @userId, OUTPUT: JSON Data: {userImage: 'Image.imageUrl', userName: 'User.name', userHandle: 'User.handle', bio: 'User.bio', createdDate: 'User.createOn', ethereumAddress: 'User.ethereumAddress', followerCount: 'COUNT(Follower)', followingCount: 'COUNT(Following)', communityCount: 'COUNT(Community)', posts: [{postId: 'Post.postId', content: 'Post.content', likeCount: 'COUNT(Like)', commentCount: 'COUNT(replyToPostId)', imageUrls: [{imageUrl: 'Image.imageUrl', aspectRatio: 'PostImage.aspectRatio'}], createdOn: 'Post.createdOn', replyToPostId: 'Post.replyToPostId', isLiked ('Will need a second join to Chat.Like that also joins on userId = @userId and then checks IS NOT NULL')}]
+Fetch User Profile - INPUT: @userId, OUTPUT: JSON Data: {userImage: 'Image.imageUrl', userName: 'User.name', userHandle: 'User.handle', bio: 'User.bio', 
+  createdDate: 'User.createOn', ethereumAddress: 'User.ethereumAddress', followerCount: 'COUNT(Follower)', followingCount: 'COUNT(Following)', 
+  communityCount: 'COUNT(Community)', posts: [{postId: 'Post.postId', content: 'Post.content', likeCount: 'COUNT(Like)', commentCount: 'COUNT(replyToPostId)', 
+  imageUrls: [{imageUrl: 'Image.imageUrl', aspectRatio: 'PostImage.aspectRatio'}], createdOn: 'Post.createdOn', replyToPostId: 'Post.replyToPostId', 
+  isLiked ('Will need a second join to Chat.Like that also joins on userId = @userId and then checks IS NOT NULL')}]
 
 Fetch User Followers - INPUT: @userId, OUTPUT: userName ('User.name'), userHandle ('User.handle'), userImage ('Image.imageUrl'), bio ('User.bio')
 
