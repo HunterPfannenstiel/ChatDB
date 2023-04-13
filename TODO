@@ -1,16 +1,18 @@
 Stored Procedures:
 -Posts:
-Fetch Post Comments - INPUT: @postId, OUTPUT: userName ('User.name'), userHandle ('User.handle'), userImage ('Image.imageUrl'), postId ('Post.postId'), 
+Fetch Post Comments - INPUT: @postId, @page, OUTPUT: userName ('User.name'), userHandle ('User.handle'), userImage ('Image.imageUrl'), postId ('Post.postId'), 
 content ('Post.content'), likeCount ('COUNT(Like)'), commentCount ('COUNT(replyToPostId)'), 
 imageUrls: [{imageUrl: 'Image.imageUrl', aspectRatio: 'PostImage.aspectRatio'}] (This should be and array of JSON data), createdOn ('Post.createdOn'), 
 replyToPostId ('Post.replyToPostId'), isLiked ('Will need a second join to Chat.Like that also joins on userId = @userId and then checks IS NOT NULL')
   NOTE: ORDER BY P.postId = @postId DESC so that the very first post is the original post
+  NOTE: We will want to only return ~15 comments for each stored procedure call. Use OFFSET-FETCH with the @page parameter to return the correct posts
 
 Update User Post - INPUT: @postId, @content, @images (IMAGE), OUTPUT: @deletedImages (the publicId of the image(s) that was replaced (if a new image was provided) (use a merge statement to delete unused images and insert new images)
 
 Delete a User Post - INPUT: @postId, OUTPUT: none
 
-Fetch all users who liked a post - INPUT: @postId, OUTPUT: userName ('User.name'), userImage ('Image.imageUrl'), userHandle ('User.handle'), bio ('User.bio')
+Fetch all users who liked a post - INPUT: @postId, @page, OUTPUT: userName ('User.name'), userImage ('Image.imageUrl'), userHandle ('User.handle'), bio ('User.bio')
+  NOTE: We will want to only return ~20 users for each stored procedure call. Use OFFSET-FETCH with the @page parameter to return the correct users
 
 Create a post like - INPUT: @postId, @userId, OUTPUT: none
 
@@ -20,13 +22,20 @@ Fetch User Profile - INPUT: @userId, OUTPUT: JSON Data: {userImage: 'Image.image
   communityCount: 'COUNT(Community)', posts: [{postId: 'Post.postId', content: 'Post.content', likeCount: 'COUNT(Like)', commentCount: 'COUNT(replyToPostId)', 
   imageUrls: [{imageUrl: 'Image.imageUrl', aspectRatio: 'PostImage.aspectRatio'}], createdOn: 'Post.createdOn', replyToPostId: 'Post.replyToPostId', 
   isLiked ('Will need a second join to Chat.Like that also joins on userId = @userId and then checks IS NOT NULL')}]
+  NOTE: Limit the amount of posts in the 'posts' array to 10
+  
+Fetch User Posts - INPUT: @userId, @page, OUTPUT: Same exact structure as the 'posts' array above except doesn't need to be JSON data (and we don't need to return 
+  the user info)
+  NOTE: Limit the amount of posts to 10 for each stored procedure call.
 
-Fetch User Followers - INPUT: @userId, OUTPUT: userName ('User.name'), userHandle ('User.handle'), userImage ('Image.imageUrl'), bio ('User.bio')
+Fetch User Followers - INPUT: @userId, @page, OUTPUT: userName ('User.name'), userHandle ('User.handle'), userImage ('Image.imageUrl'), bio ('User.bio')
+  NOTE: We will want to only return ~20 users for each stored procedure call.
 
-Fetch User Following - INPUT: @userId, OUTPUT: userName ('User.name'), userHandle ('User.handle'), userImage ('Image.imageUrl'), bio ('User.bio')
+Fetch User Following - INPUT: @userId, @page, OUTPUT: userName ('User.name'), userHandle ('User.handle'), userImage ('Image.imageUrl'), bio ('User.bio')
+  NOTE: We will want to only return ~20 users for each stored procedure call.
 
 Update User - INPUT: @userId, @image (IMAGE), @bio, @handle, @name, OUTPUT: @deletedImage (the publicId of the iamge that was replaced (if a new image was provided))
 
 Stored Procedures Completed:
-Create Post ( and create post comment)
+Create Post ( and create post comment) - TODO: Implement OFFSET-FETCH
 Create User
