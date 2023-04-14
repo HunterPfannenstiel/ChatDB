@@ -28,12 +28,6 @@ Fetch User Posts - INPUT: @userId, @page, OUTPUT: Same exact structure as the 'p
   the user info)
   NOTE: Limit the amount of posts to 10 for each stored procedure call.
 
-Fetch User Followers - INPUT: @userId, @page, OUTPUT: userName ('User.name'), userHandle ('User.handle'), userImage ('Image.imageUrl'), bio ('User.bio')
-  NOTE: We will want to only return ~20 users for each stored procedure call.
-
-Fetch User Following - INPUT: @userId, @page, OUTPUT: userName ('User.name'), userHandle ('User.handle'), userImage ('Image.imageUrl'), bio ('User.bio')
-  NOTE: We will want to only return ~20 users for each stored procedure call.
-
 Update User - INPUT: @userId, @image (IMAGE), @bio, @handle, @name, OUTPUT: @deletedImage (the publicId of the iamge that was replaced (if a new image was provided))
 
 Stored Procedures Completed:
