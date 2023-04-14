@@ -1,1 +1,6 @@
+Payton:
+Fetch User Followers - INPUT: @userId, @page, OUTPUT: userName ('User.name'), userHandle ('User.handle'), userImage ('Image.imageUrl'), bio ('User.bio')
+  NOTE: We will want to only return ~20 users for each stored procedure call.
 
+Fetch User Following - INPUT: @userId, @page, OUTPUT: userName ('User.name'), userHandle ('User.handle'), userImage ('Image.imageUrl'), bio ('User.bio')
+  NOTE: We will want to only return ~20 users for each stored procedure call.
