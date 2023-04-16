@@ -11,7 +11,7 @@ BEGIN
 		INNER JOIN Chat.Follower F ON U.userId = F.followerUserId 
 			AND @userId = F.followedUserId
 		INNER JOIN Chat.[Image] I ON U.imageId = I.imageId
-	ORDER BY F.followDate
+	ORDER BY F.followDate DESC
 	OFFSET (@page * 20) ROWS FETCH NEXT 20 ROWS ONLY
 END;
 
