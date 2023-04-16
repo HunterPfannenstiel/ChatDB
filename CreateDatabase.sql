@@ -31,7 +31,7 @@ CREATE TABLE Chat.[User]
 (
 	userId INT IDENTITY(1, 1) PRIMARY KEY,
 	name NVARCHAR(30) NOT NULL,
-	handle NVARCHAR(30) NOT NULL,
+	handle NVARCHAR(30) NOT NULL UNIQUE,
 	imageId INT FOREIGN KEY
 		REFERENCES Chat.[Image](imageId) NOT NULL,
 	bio NVARCHAR(150),
@@ -40,6 +40,14 @@ CREATE TABLE Chat.[User]
 	status BIT NOT NULL DEFAULT 1,
 	createdDate DATETIMEOFFSET NOT NULL DEFAULT SYSDATETIMEOFFSET(),
 )
+
+CREATE UNIQUE INDEX UQ_User_Email
+ON Chat.[User] (email)
+WHERE email IS NOT NULL
+
+CREATE UNIQUE INDEX UQ_User_Ether
+ON Chat.[User] (ethereumAddress)
+WHERE ethereumAddress IS NOT NULL
 
 CREATE TABLE Chat.Follower
 (
@@ -190,11 +198,10 @@ JOIN @images I ON I.publicId = II.publicId
 END
 GO
 
-CREATE PROCEDURE Chat.FetchFeed(@userId INT, @feed NVARCHAR(MAX) OUTPUT) 
+CREATE PROCEDURE Chat.FetchFeed(@userId INT) 
 AS
 BEGIN
-SET @feed = 
-	(SELECT U.[name] AS userName, I.imageUrl AS userImage, U.handle AS userHandle, COUNT(Followed.followedUserId) AS followerCount, COUNT([Following].followerUserId) AS followingCount, (
+	SELECT U.[name] AS userName, I.imageUrl AS userImage, U.handle AS userHandle, COUNT(Followed.followedUserId) AS followerCount, COUNT([Following].followerUserId) AS followingCount, (
 		SELECT U.[name] AS userName, I.imageUrl AS userImage, U.handle AS userHandle, P.content, P.postId, P.createdOn, P.replyToPostId, COUNT(L.postId) AS likeCount, COUNT(R.postId) AS commentCount, Chat.FetchImages(P.postId) AS images,
 		IIF(UL.userId IS NOT NULL, 1, 0) AS isLiked
 		FROM Chat.Follower F
@@ -208,6 +215,8 @@ SET @feed =
 		WHERE F.followerUserId = @userId
 		GROUP BY P.content, P.postId, P.createdOn, P.replyToPostId, U.[name], I.imageUrl, U.handle, IIF(UL.userId IS NOT NULL, 1, 0)
 		ORDER BY P.createdOn DESC
+		OFFSET 0 ROWS
+		FETCH FIRST 10 ROWS ONLY
 		FOR JSON PATH
 	) AS posts
 	FROM Chat.[User] U
@@ -216,13 +225,16 @@ SET @feed =
 	LEFT JOIN Chat.[Follower] [Following] ON [Following].followerUserId = @userId
 	WHERE U.userId = @userId
 	GROUP BY U.[name], I.imageUrl, U.handle
-	FOR JSON PATH, WITHOUT_ARRAY_WRAPPER)
 END
 GO
 
 --Functions
 DROP FUNCTION IF EXISTS Chat.IsValidHandle;
 DROP FUNCTION IF EXISTS Chat.FetchImages;
+DROP FUNCTION IF EXISTS Chat.FetchWeb3User;
+DROP FUNCTION IF EXISTS Chat.FetchEmailUser;
+DROP FUNCTION IF EXISTS Chat.FetchFollowers;
+DROP FUNCTION IF EXISTS Chat.FetchFollowing;
 GO
 
 CREATE FUNCTION Chat.FetchImages(@postId INT)
@@ -253,6 +265,64 @@ RETURN @output
 END
 GO
 
+CREATE FUNCTION Chat.FetchWeb3User(@ethereumAddress NVARCHAR(64))
+RETURNS TABLE
+AS
+RETURN (SELECT U.userId
+	FROM Chat.[User] U
+	WHERE U.ethereumAddress = @ethereumAddress)
+GO
+
+CREATE FUNCTION Chat.FetchEmailUser(@email NVARCHAR(128))
+RETURNS TABLE
+AS
+RETURN (SELECT U.userId
+	FROM Chat.[User] U
+	WHERE U.email = @email)
+GO
+
+--'FetchFollowing' means fetch the users that @userId follows.
+CREATE FUNCTION Chat.FetchFollowing (
+	@userId INT,
+	@page INT
+)
+RETURNS TABLE
+AS
+RETURN (
+	SELECT U.[name] AS userName,
+		U.handle AS userHandle,
+		I.imageUrl AS userImage,
+		U.bio
+	FROM Chat.[User] U 
+		INNER JOIN Chat.Follower F ON @userId = F.followerUserId
+			AND U.userId = F.followedUserId
+		INNER JOIN Chat.[Image] I ON U.imageId = I.imageId
+	ORDER BY F.followDate DESC
+	OFFSET (@page * 20) ROWS FETCH NEXT 20 ROWS ONLY
+)
+GO
+
+--'FetchFollowers' means fetch the users that follow @userId.
+CREATE FUNCTION Chat.FetchFollowers (
+	@userId INT,
+	@page INT
+)
+RETURNS TABLE
+AS
+RETURN (
+	SELECT U.[name] AS userName,
+		U.handle AS userHandle,
+		I.imageUrl AS userImage,
+		U.bio
+	FROM Chat.[User] U 
+		INNER JOIN Chat.Follower F ON @userId = F.followedUserId
+			AND U.userId = F.followerUserId
+		INNER JOIN Chat.[Image] I ON U.imageId = I.imageId
+	ORDER BY F.followDate DESC
+	OFFSET (@page * 20) ROWS FETCH NEXT 20 ROWS ONLY
+);
+GO
+
 --Types
 DROP TYPE IF EXISTS NEW_IMAGE;
 DROP TYPE IF EXISTS FEED_IMAGE;
@@ -281,13 +351,13 @@ VALUES('https://res.cloudinary.com/dwg1i9w2u/image/upload/v1673400003/item_image
 ('https://res.cloudinary.com/dwg1i9w2u/image/upload/v1673400263/item_images/qcbl4s4wet0ift8kxyfj.png', '128');
 
 	--Users
-INSERT INTO Chat.[User](name, handle, email, ethereumAddress, imageId, bio)
-VALUES ('fartis0', 'kscogings0', 'jelbourn0@pagesperso-orange.fr', '0x405a59640c0aa2b46d0eb42d949f3ae571c385db', 1, 'Wuhan Transportation University'), 
-('garkill1', 'rhyams1', 'gdyne1@shinystat.com', '0xf0b68b5cfdd9076ca609d9358bc81bc53dd04cdc', 2, 'Pace University'),
-('njarmain2', 'edelaperrelle2', null, null, 3, 'Universidad Nicaragüense de Ciencia y Tecnológica'),
-('cswenson3', 'nesp3', 'gbeaument3@berkeley.edu', '0x3848cc6af7eb069b26f479b3d1d140f94ad2438b', 4, 'Creighton University'),
-('bstirrip4', 'fgribbell4', null, null, 5, 'University of Essex'),
-('gellams5', 'czarfati5', 'bburress5@photobucket.com', '0x03cdacd611fbbd90f2a1b884161cc4e94a4698b5', 6, 'Arizona Christian University');
+INSERT INTO Chat.[User](name, handle, ethereumAddress, imageId, bio) VALUES ('fartis0', 'kscogings0', '0x405a59640c0aa2b46d0eb42d949f3ae571c385db', 1, 'Wuhan Transportation University')
+INSERT INTO Chat.[User](name, handle, email, imageId, bio) VALUES ('garkill1', 'rhyams1', 'gdyne1@shinystat.com', 2, 'Pace University')
+INSERT INTO Chat.[User](name, handle, ethereumAddress, imageId, bio) VALUES ('njarmain2', 'edelaperrelle2', '0x3848cc6af7eb069b26f479b3d1d140f94ad2438b', 3, 'Universidad NicaragÃ¼ense de Ciencia y TecnolÃ³gica')
+INSERT INTO Chat.[User](name, handle, email, imageId, bio) VALUES ('cswenson3', 'nesp3', 'gbeaument3@berkeley.edu', 4, 'Creighton University')
+INSERT INTO Chat.[User](name, handle, email, imageId, bio) VALUES ('bstirrip4', 'fgribbell4', 'test@gmail.com', 5, 'University of Essex')
+INSERT INTO Chat.[User](name, handle, email, imageId, bio) VALUES ('gellams5', 'czarfati5', 'bburress5@photobucket.com', 6, 'Arizona Christian University')
+INSERT INTO Chat.[User](name, handle, email, imageId, bio) VALUES ('gellams5', 't', 'hunterstatek@gmail.com', 6, 'Arizona Christian University')
 
 
 	--UserPosts
