@@ -1,11 +1,5 @@
 Stored Procedures:
 -Posts:
-Fetch Post Comments - INPUT: @postId, @page, OUTPUT: userName ('User.name'), userHandle ('User.handle'), userImage ('Image.imageUrl'), postId ('Post.postId'), 
-content ('Post.content'), likeCount ('COUNT(Like)'), commentCount ('COUNT(replyToPostId)'), 
-imageUrls: [{imageUrl: 'Image.imageUrl', aspectRatio: 'PostImage.aspectRatio'}] (This should be and array of JSON data), createdOn ('Post.createdOn'), 
-replyToPostId ('Post.replyToPostId'), isLiked ('Will need a second join to Chat.Like that also joins on userId = @userId and then checks IS NOT NULL')
-  NOTE: ORDER BY P.postId = @postId DESC so that the very first post is the original post
-  NOTE: We will want to only return ~15 comments for each stored procedure call. Use OFFSET-FETCH with the @page parameter to return the correct posts
 
 Update User Post - INPUT: @postId, @content, @images (IMAGE), OUTPUT: @deletedImages (the publicId of the image(s) that was replaced (if a new image was provided) (use a merge statement to delete unused images and insert new images)
 
