@@ -34,11 +34,9 @@ ORDER BY F.followDate DESC
 OFFSET (@page * 20) ROWS FETCH NEXT 20 ROWS ONLY
 GO
 
-SELECT *
-FROM Chat.FetchFollowers(5, 0);
+EXEC Chat.FetchFollowing 'rhyams1', 0
 
-SELECT *
-FROM Chat.FetchFollowing(5, 0);
+EXEC Chat.FetchFollowers 'rhyams1', 0
 
 SELECT *
 FROM Chat.Follower;
