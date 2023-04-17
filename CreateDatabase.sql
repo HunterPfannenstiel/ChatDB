@@ -383,9 +383,25 @@ VALUES (1, 'quisque ut erat curabitur gravida nisi at nibh in hac habitasse plat
 (6, 'curae nulla dapibus dolor vel est donec odio justo sollicitudin ut suscipit a feugiat et eros'),
 (6, 'vestibulum sed magna at nunc commodo placerat praesent blandit nam');
 
+	--Post Comments
+INSERT Chat.Post (userId, content, replyToPostId)
+VALUES (1, 'quisque ut erat curabitur gravida nisi at nibh in hac habitasse platea dictumst', 1),
+(1, 'ante ipsum primis in faucibus orci luctus et ultrices posuere cubilia curae donec pharetra magna vestibulum aliquet ultrices erat', 1),
+(1, 'ante ipsum primis in faucibus orci luctus et ultrices posuere cubilia curae donec pharetra magna vestibulum aliquet ultrices erat', 1)
+
+	--Comments to comments
+DECLARE @PostComment INT = @@IDENTITY
+INSERT Chat.Post (userId, content, replyToPostId)
+VALUES (1, 'vestibulum quam sapien varius ut blandit non interdum in ante vestibulum ante ipsum primis in faucibus orci luctus', @PostComment),
+(1, 'eget nunc donec quis orci eget orci vehicula condimentum curabitur', @PostComment),
+(2, 'blandit mi in porttitor pede justo eu massa donec dapibus duis at velit eu est congue elementum', 1),
+(2, 'in faucibus orci luctus et ultrices posuere cubilia curae nulla dapibus', @PostComment),
+(2, 'vulputate vitae nisl aenean lectus pellentesque eget nunc donec quis orci eget orci vehicula condimentum curabitur in libero', @PostComment),
+(2, 'imperdiet sapien urna pretium nisl ut volutpat sapien arcu sed augue aliquam erat volutpat in congue', @PostComment);
+
 	--Post Likes
 INSERT INTO Chat.[Like](postId, userId)
-VALUES(1, 2), (1, 3), (1, 4), (2, 2), (2, 3), (10, 2), (10, 1), (10, 4)
+VALUES(1, 2), (1, 3), (1, 4), (2, 2), (2, 3), (10, 2), (10, 1), (10, 4), (@PostComment, 1), (@PostComment, 2)
 
 	--Followers
 INSERT INTO Chat.Follower(followedUserId, followerUserId)
