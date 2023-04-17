@@ -271,6 +271,7 @@ DROP FUNCTION IF EXISTS Chat.IsValidHandle;
 DROP FUNCTION IF EXISTS Chat.FetchImages;
 DROP FUNCTION IF EXISTS Chat.FetchWeb3User;
 DROP FUNCTION IF EXISTS Chat.FetchEmailUser;
+DROP FUNCTION IF EXISTS Chat.FetchPostComments;
 GO
 
 CREATE FUNCTION Chat.FetchImages(@postId INT)
@@ -315,6 +316,39 @@ AS
 RETURN (SELECT U.userId
 	FROM Chat.[User] U
 	WHERE U.email = @email)
+GO
+
+--@userId is the user who is viewing the page.
+CREATE OR ALTER FUNCTION Chat.FetchPostComments (
+	@postId INT,
+	@userId INT,
+	@page INT
+)
+RETURNS TABLE
+AS
+RETURN
+	SELECT U.[name] AS userName,
+		U.handle AS userHandle,
+		I.imageUrl AS userImage,
+		P.postId,
+		P.content,
+		COUNT(DISTINCT L.userId) AS likeCount,
+		COUNT(DISTINCT P2.postId) AS commentCount,
+		Chat.FetchImages(P.postId) AS imageUrls,
+		IIF(L2.userId IS NULL, 0, 1) AS isLiked,
+		P.createdOn
+	FROM Chat.Post P
+		LEFT JOIN Chat.[Like] L ON P.postId = L.postId
+		LEFT JOIN Chat.Post P2 ON P.postId = P2.replyToPostId
+		INNER JOIN Chat.[User] U ON P.userId = U.userId
+		INNER JOIN Chat.[Image] I ON U.imageId = I.imageId
+		LEFT JOIN Chat.[Like] L2 ON @userId = L2.userId
+			AND P.postId = L2.postId
+	WHERE P.replyToPostId = @postId 
+		OR P.postId = @postId
+	GROUP BY U.[name], U.handle, I.imageUrl, P.postId, P.content, L2.userId, P.createdOn
+	ORDER BY P.postId
+	OFFSET (@page * 15) ROWS FETCH NEXT 15 ROWS ONLY
 GO
 
 --Types
@@ -395,7 +429,7 @@ VALUES (1, 'vestibulum quam sapien varius ut blandit non interdum in ante vestib
 
 	--Post Likes
 INSERT INTO Chat.[Like](postId, userId)
-VALUES(1, 2), (1, 3), (1, 4), (2, 2), (2, 3), (10, 2), (10, 1), (10, 4), (@PostComment, 1), (@PostComment, 2)
+VALUES(1, 2), (1, 3), (1, 4), (2, 2), (2, 3), (10, 2), (10, 1), (10, 4), (@PostComment, 1), (@PostComment, 2), (1, 1)
 
 	--Followers
 INSERT INTO Chat.Follower(followedUserId, followerUserId)
