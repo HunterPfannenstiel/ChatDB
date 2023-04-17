@@ -149,6 +149,8 @@ CREATE TABLE Chat.CommunityTag
 DROP PROCEDURE IF EXISTS Chat.CreateUser
 DROP PROCEDURE IF EXISTS Chat.CreatePost;
 DROP PROCEDURE IF EXISTS Chat.FetchFeed;
+DROP PROCEDURE IF EXISTS Chat.FetchFollowers;
+DROP PROCEDURE IF EXISTS Chat.FetchFollowing;
 DROP TYPE IF EXISTS IMAGES;
 GO
 
@@ -228,13 +230,47 @@ BEGIN
 END
 GO
 
+--'FetchFollowing' means fetch the users that @userId follows.
+CREATE OR ALTER PROCEDURE Chat.FetchFollowing
+	@userHandle NVARCHAR(30),
+	@page INT
+AS
+DECLARE @userId INT = (SELECT U.userId FROM Chat.[User] U WHERE U.handle = @userHandle);
+SELECT U.[name] AS userName,
+	U.handle AS userHandle,
+	I.imageUrl AS userImage,
+	U.bio AS userBio
+FROM Chat.[User] U 
+	INNER JOIN Chat.Follower F ON @userId = F.followerUserId
+		AND U.userId = F.followedUserId
+	INNER JOIN Chat.[Image] I ON U.imageId = I.imageId
+ORDER BY F.followDate DESC
+OFFSET (@page * 20) ROWS FETCH NEXT 20 ROWS ONLY
+GO
+
+--'FetchFollowers' means fetch the users that follow @userId.
+CREATE OR ALTER PROCEDURE Chat.FetchFollowers
+	@userHandle NVARCHAR(30),
+	@page INT
+AS
+DECLARE @userId INT = (SELECT U.userId FROM Chat.[User] U WHERE U.handle = @userHandle);
+SELECT U.[name] AS userName,
+	U.handle AS userHandle,
+	I.imageUrl AS userImage,
+	U.bio AS userBio
+FROM Chat.[User] U 
+	INNER JOIN Chat.Follower F ON @userId = F.followedUserId
+		AND U.userId = F.followerUserId
+	INNER JOIN Chat.[Image] I ON U.imageId = I.imageId
+ORDER BY F.followDate DESC
+OFFSET (@page * 20) ROWS FETCH NEXT 20 ROWS ONLY
+GO
+
 --Functions
 DROP FUNCTION IF EXISTS Chat.IsValidHandle;
 DROP FUNCTION IF EXISTS Chat.FetchImages;
 DROP FUNCTION IF EXISTS Chat.FetchWeb3User;
 DROP FUNCTION IF EXISTS Chat.FetchEmailUser;
-DROP FUNCTION IF EXISTS Chat.FetchFollowers;
-DROP FUNCTION IF EXISTS Chat.FetchFollowing;
 GO
 
 CREATE FUNCTION Chat.FetchImages(@postId INT)
@@ -279,48 +315,6 @@ AS
 RETURN (SELECT U.userId
 	FROM Chat.[User] U
 	WHERE U.email = @email)
-GO
-
---'FetchFollowing' means fetch the users that @userId follows.
-CREATE FUNCTION Chat.FetchFollowing (
-	@userId INT,
-	@page INT
-)
-RETURNS TABLE
-AS
-RETURN (
-	SELECT U.[name] AS userName,
-		U.handle AS userHandle,
-		I.imageUrl AS userImage,
-		U.bio
-	FROM Chat.[User] U 
-		INNER JOIN Chat.Follower F ON @userId = F.followerUserId
-			AND U.userId = F.followedUserId
-		INNER JOIN Chat.[Image] I ON U.imageId = I.imageId
-	ORDER BY F.followDate DESC
-	OFFSET (@page * 20) ROWS FETCH NEXT 20 ROWS ONLY
-)
-GO
-
---'FetchFollowers' means fetch the users that follow @userId.
-CREATE FUNCTION Chat.FetchFollowers (
-	@userId INT,
-	@page INT
-)
-RETURNS TABLE
-AS
-RETURN (
-	SELECT U.[name] AS userName,
-		U.handle AS userHandle,
-		I.imageUrl AS userImage,
-		U.bio
-	FROM Chat.[User] U 
-		INNER JOIN Chat.Follower F ON @userId = F.followedUserId
-			AND U.userId = F.followerUserId
-		INNER JOIN Chat.[Image] I ON U.imageId = I.imageId
-	ORDER BY F.followDate DESC
-	OFFSET (@page * 20) ROWS FETCH NEXT 20 ROWS ONLY
-);
 GO
 
 --Types
