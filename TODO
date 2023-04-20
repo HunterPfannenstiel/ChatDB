@@ -1,7 +1,8 @@
 Stored Procedures:
 -Posts:
 
-Update User Post - INPUT: @postId, @content, @images (IMAGE), OUTPUT: @deletedImages (the publicId of the image(s) that was replaced (if a new image was provided) (use a merge statement to delete unused images and insert new images)
+Update User Post - INPUT: @postId, @content, @images (IMAGE), @deleteImages BIT, OUTPUT: @deletedImages (the publicId of the image(s) that was replaced (if a new image was provided) (use a merge statement to delete unused images and insert new images)
+  NOTE: If @deleteImages = 1, remove all images from the post (and get the public ids) (there may be new images to insert still)
 
 Delete a User Post - INPUT: @postId, OUTPUT: none
 
