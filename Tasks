@@ -1,9 +1,11 @@
 Payton:
 Fetch User Followers - INPUT: @userId, @page, OUTPUT: @followers = userName ('User.name'), userHandle ('User.handle'), userImage ('Image.imageUrl'), bio ('User.bio')
   NOTE: We will want to only return ~20 users for each stored procedure call.
+    FINISHED
 
 Fetch User Following - INPUT: @userId, @page, OUTPUT: @following = userName ('User.name'), userHandle ('User.handle'), userImage ('Image.imageUrl'), bio ('User.bio')
   NOTE: We will want to only return ~20 users for each stored procedure call.
+    FINISHED
 
 Fetch Post Comments - INPUT: @postId, @page, OUTPUT: userName ('User.name'), userHandle ('User.handle'), userImage ('Image.imageUrl'), postId ('Post.postId'), 
 content ('Post.content'), likeCount ('COUNT(Like)'), commentCount ('COUNT(replyToPostId)'), 
@@ -11,3 +13,12 @@ imageUrls: [{imageUrl: 'Image.imageUrl', aspectRatio: 'PostImage.aspectRatio'}] 
 replyToPostId ('Post.replyToPostId'), isLiked ('Will need a second join to Chat.Like that also joins on userId = @userId and then checks IS NOT NULL')
   NOTE: ORDER BY P.postId = @postId DESC so that the very first post is the original post
   NOTE: We will want to only return ~15 comments for each stored procedure call. Use OFFSET-FETCH with the @page parameter to return the correct posts
+    FINISHED
+
+Fetch User Profile - INPUT: @userId, OUTPUT: JSON Data: {userImage: 'Image.imageUrl', userName: 'User.name', userHandle: 'User.handle', bio: 'User.bio', 
+  createdDate: 'User.createOn', ethereumAddress: 'User.ethereumAddress', followerCount: 'COUNT(Follower)', followingCount: 'COUNT(Following)', 
+  communityCount: 'COUNT(Community)', posts: [{postId: 'Post.postId', content: 'Post.content', likeCount: 'COUNT(Like)', commentCount: 'COUNT(replyToPostId)', 
+  imageUrls: [{imageUrl: 'Image.imageUrl', aspectRatio: 'PostImage.aspectRatio'}], createdOn: 'Post.createdOn', replyToPostId: 'Post.replyToPostId', 
+  isLiked ('Will need a second join to Chat.Like that also joins on userId = @userId and then checks IS NOT NULL')}]
+  NOTE: Limit the amount of posts in the 'posts' array to 10
+    FINISHED
