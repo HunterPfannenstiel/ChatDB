@@ -11,13 +11,6 @@ Fetch all users who liked a post - INPUT: @postId, @page, OUTPUT: userName ('Use
 Create a post like - INPUT: @postId, @userId, OUTPUT: none
 
 -User:
-Fetch User Profile - INPUT: @userId, OUTPUT: JSON Data: {userImage: 'Image.imageUrl', userName: 'User.name', userHandle: 'User.handle', bio: 'User.bio', 
-  createdDate: 'User.createOn', ethereumAddress: 'User.ethereumAddress', followerCount: 'COUNT(Follower)', followingCount: 'COUNT(Following)', 
-  communityCount: 'COUNT(Community)', posts: [{postId: 'Post.postId', content: 'Post.content', likeCount: 'COUNT(Like)', commentCount: 'COUNT(replyToPostId)', 
-  imageUrls: [{imageUrl: 'Image.imageUrl', aspectRatio: 'PostImage.aspectRatio'}], createdOn: 'Post.createdOn', replyToPostId: 'Post.replyToPostId', 
-  isLiked ('Will need a second join to Chat.Like that also joins on userId = @userId and then checks IS NOT NULL')}]
-  NOTE: Limit the amount of posts in the 'posts' array to 10
-  
 Fetch User Posts - INPUT: @userId, @page, OUTPUT: Same exact structure as the 'posts' array above except doesn't need to be JSON data (and we don't need to return 
   the user info)
   NOTE: Limit the amount of posts to 10 for each stored procedure call.
