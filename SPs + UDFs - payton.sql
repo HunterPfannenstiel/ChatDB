@@ -70,9 +70,47 @@ RETURN
 	OFFSET (@page * 15) ROWS FETCH NEXT 15 ROWS ONLY
 GO
 
+CREATE OR ALTER PROCEDURE Chat.FetchUserProfile
+	@userHandle NVARCHAR(30)
+AS
+DECLARE @userId INT = (SELECT U.userId FROM Chat.[User] U WHERE U.handle = @userHandle);
+SELECT I.imageUrl AS userImage,
+	U.[name] AS userName,
+	U.bio,
+	U.createdDate,
+	U.ethereumAddress,
+	COUNT(DISTINCT F.followerUserId) AS followerCount,
+	COUNT(DISTINCT F2.followedUserId) AS followingCount,
+	(
+		SELECT P.postId,
+			P.content,
+			COUNT(DISTINCT L.userId) AS likeCount,
+			COUNT(DISTINCT P2.postId) AS commentCount,
+			Chat.FetchImages(P.postId) AS imageUrls,
+			P.createdOn,
+			IIF(L2.userId IS NULL, 0, 1) AS isLiked
+		FROM Chat.Post P
+			LEFT JOIN Chat.[Like] L ON P.postId = L.postId
+			LEFT JOIN Chat.Post P2 ON P.postId = P2.replyToPostId
+			LEFT JOIN Chat.[Like] L2 ON P.postId = L2.postId
+				AND L2.userId = @userId
+		WHERE P.userId = @userId
+		GROUP BY P.postId, P.content, P.createdOn, L2.userId
+		FOR JSON PATH
+	) AS posts
+	FROM Chat.[User] U
+		LEFT JOIN Chat.Follower F ON U.userId = F.followedUserId
+		LEFT JOIN Chat.Follower F2 ON U.userId = F2.followerUserId
+		INNER JOIN Chat.[Image] I ON U.imageId = I.imageId
+	WHERE U.userId = @userId
+	GROUP BY I.imageUrl, U.[name], U.bio, U.createdDate, U.ethereumAddress
+GO
+
 EXEC Chat.FetchFollowing 'rhyams1', 0
 
 EXEC Chat.FetchFollowers 'rhyams1', 0
+
+EXEC Chat.FetchUserProfile 'kscogings0'
 
 SELECT *
 FROM Chat.FetchPostComments(1, 1, 0)
@@ -86,4 +124,4 @@ FROM Chat.Follower;
 
 SELECT U.[name], U.userId, U.handle
 FROM Chat.[User] U 
-WHERE U.userId = 2;
+WHERE U.userId = 1;
