@@ -1,7 +1,7 @@
 
-Update User - INPUT: @userId, @image (IMAGE), @bio, @handle, @name, OUTPUT: @deletedImage (the publicId of the iamge that was replaced (if a new image was provided))
+--Update User - INPUT: @userId, @image (IMAGE), @bio, @handle, @name, OUTPUT: @deletedImage (the publicId of the iamge that was replaced (if a new image was provided))
 --have not added to db file 
-CREATE PROCEDURE dbo.UpdateUser
+CREATE PROCEDURE Chat.UpdateUser
     @userId INT,
     @imagePublicId NVARCHAR(100),
     @bio NVARCHAR(150),
@@ -84,3 +84,73 @@ BEGIN
     END
 END
 
+------Delete a User Post - INPUT: @postId, OUTPUT: none
+CREATE PROCEDURE Chat.DeleteUserPost
+    @postId INT
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    DELETE FROM Chat.Post
+    WHERE postId = @postId
+END
+---------------Fetch all users who liked a post - INPUT: @postId, @page, OUTPUT: userName ('User.name'), userImage ('Image.imageUrl'), userHandle ('User.handle'), bio ('User.bio')
+--NOTE: We will want to only return ~20 users for each stored procedure call. Use OFFSET-FETCH with the @page parameter to return the correct users
+CREATE PROCEDURE Chat.GetUsersWhoLikedPost
+    @postId INT,
+    @page INT
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    DECLARE @pageSize INT = 20
+    DECLARE @offset INT = (@page - 1) * @pageSize
+
+    SELECT userName, userImage, userHandle, bio
+    FROM (
+        SELECT [User].name AS userName,
+            Image.imageUrl AS userImage,
+            [User].handle AS userHandle,
+            [User].bio,
+            ROW_NUMBER() OVER (ORDER BY [Like].postId) AS rownum
+        FROM Chat.[Like]
+        INNER JOIN Chat.[User] ON [Like].userId = [User].userId
+        INNER JOIN Chat.[Image] ON [User].imageId = [Image].imageId
+        WHERE [Like].postId = @postId
+    ) AS subquery
+    WHERE rownum > @offset AND rownum <= (@offset + @pageSize)
+    ORDER BY rownum
+END
+
+-------Create a post like - INPUT: @postId, @userId, OUTPUT: none
+CREATE PROCEDURE Chat.LikePost
+    @postId INT,
+    @userId INT
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    INSERT INTO Chat.[Like] (postId, userId)
+    VALUES (@postId, @userId)
+END
+
+--Fetch User Posts - INPUT: @userId, @page, OUTPUT: Same exact structure as the 'posts' array above except doesn't need to be JSON data (and we don't need to return 
+--the user info)
+--NOTE: Limit the amount of posts to 10 for each stored procedure call.
+CREATE PROCEDURE Chat.GetUserPosts
+    @userId INT,
+    @page INT
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    DECLARE @pageSize INT = 10
+    DECLARE @offset INT = (@page - 1) * @pageSize
+
+    SELECT Post.postId, Post.content, Post.replyToPostId, Post.isPinned, Post.createdOn
+    FROM Chat.Post
+    WHERE Post.userId = @userId
+    ORDER BY Post.createdOn DESC
+    OFFSET @offset ROWS
+    FETCH NEXT @pageSize ROWS ONLY
+END
