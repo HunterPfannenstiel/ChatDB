@@ -106,6 +106,48 @@ SELECT I.imageUrl AS userImage,
 	GROUP BY I.imageUrl, U.[name], U.bio, U.createdDate, U.ethereumAddress
 GO
 
+CREATE OR ALTER PROCEDURE Chat.UpdatePost
+	@postId INT,
+	@content NVARCHAR(280),
+	@images IMAGES READONLY,
+	@deleteImages BIT,
+	@deletedImages NVARCHAR(MAX) OUTPUT
+AS
+IF @deleteImages = 1
+	BEGIN
+		SET @deletedImages = (
+			SELECT I.imageId,
+				I.publicId
+			FROM Chat.[Image] I 
+				INNER JOIN Chat.PostImage P ON I.imageId = P.imageId
+			WHERE P.postId = @postId
+			FOR JSON PATH
+		)
+		DELETE I
+		FROM Chat.[Image] I
+		WHERE EXISTS (
+			SELECT *
+			FROM Chat.PostImage P
+			WHERE I.imageId = P.imageId 
+				AND P.postId = @postId
+		)
+	END
+IF EXISTS (SELECT * FROM @images)
+	BEGIN
+		INSERT Chat.[Image] (imageUrl, publicId)
+		SELECT I.imageUrl, I.publicId
+		FROM @images I
+
+		INSERT Chat.PostImage (imageId, postId, aspectRatio)
+		SELECT I.imageId, @postId, IT.aspectRatio
+		FROM Chat.[Image] I
+			INNER JOIN @images IT ON I.publicId = IT.publicId
+	END
+	UPDATE Chat.Post
+	SET content = @content
+	WHERE postId = @postId
+GO
+
 EXEC Chat.FetchFollowing 'rhyams1', 0
 
 EXEC Chat.FetchFollowers 'rhyams1', 0
