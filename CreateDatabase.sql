@@ -1,6 +1,7 @@
 --DB
 DROP DATABASE IF EXISTS ChatApplication
 CREATE DATABASE ChatApplication
+USE ChatApplication
 
 --Tables
 IF SCHEMA_ID(N'Chat') IS NULL
@@ -175,7 +176,7 @@ BEGIN
 END
 GO
 
-CREATE PROCEDURE Chat.CreatePost(@userId INT, @content NVARCHAR(280), @replyToPostId INT, @communityId INT, @images IMAGES READONLY, @postId INT OUTPUT)
+CREATE PROCEDURE Chat.CreatePost(@userId INT, @content NVARCHAR(280), @replyToPostId INT, @communityId INT, @images IMAGES READONLY)
 AS
 BEGIN
 
@@ -183,6 +184,8 @@ DECLARE @ImageInfo TABLE (
 	id INT,
 	publicId NVARCHAR(100)
 )
+
+DECLARE @postId INT;
 
 INSERT INTO Chat.[Image](imageUrl, publicId)
 OUTPUT INSERTED.imageId, INSERTED.publicId INTO @ImageInfo
@@ -197,14 +200,19 @@ INSERT INTO Chat.PostImage(imageId, postId, aspectRatio)
 SELECT II.id, @postId, I.aspectRatio
 FROM @ImageInfo II
 JOIN @images I ON I.publicId = II.publicId
+
+SELECT U.name AS userName, U.handle AS userHandle, I.imageUrl AS userImage, @postId AS postId, @content AS content, Chat.FetchImages(@postId) AS images, SYSDATETIMEOFFSET() AS createdOn, @replyToPostId AS replyToPostId
+FROM Chat.[User] U
+JOIN Chat.[Image] I ON I.imageId = U.imageId
+WHERE U.userId = @userId
 END
 GO
 
 CREATE PROCEDURE Chat.FetchFeed(@userId INT) 
 AS
 BEGIN
-	SELECT U.[name] AS userName, I.imageUrl AS userImage, U.handle AS userHandle, COUNT(Followed.followedUserId) AS followerCount, COUNT([Following].followerUserId) AS followingCount, (
-		SELECT U.[name] AS userName, I.imageUrl AS userImage, U.handle AS userHandle, P.content, P.postId, P.createdOn, P.replyToPostId, COUNT(L.postId) AS likeCount, COUNT(R.postId) AS commentCount, Chat.FetchImages(P.postId) AS images,
+	SELECT U.[name] AS userName, I.imageUrl AS userImage, U.handle AS userHandle, COUNT(DISTINCT Followed.followedUserId) AS followerCount, COUNT(DISTINCT [Following].followerUserId) AS followingCount, (JSON_QUERY((
+		SELECT U.[name] AS userName, I.imageUrl AS userImage, U.handle AS userHandle, P.content, P.postId, P.createdOn, P.replyToPostId, COUNT(DISTINCT L.userId) AS likeCount, COUNT(DISTINCT R.postId) AS commentCount, JSON_QUERY(Chat.FetchImages(P.postId)) AS images,
 		IIF(UL.userId IS NOT NULL, 1, 0) AS isLiked
 		FROM Chat.Follower F
 		JOIN Chat.Post P ON P.userId = F.followedUserId AND P.replyToPostId IS NULL
@@ -220,7 +228,7 @@ BEGIN
 		OFFSET 0 ROWS
 		FETCH FIRST 10 ROWS ONLY
 		FOR JSON PATH
-	) AS posts
+	))) AS posts
 	FROM Chat.[User] U
 	JOIN Chat.[Image] I ON I.imageId = U.imageId
 	LEFT JOIN Chat.[Follower] Followed ON Followed.followedUserId = @userId
@@ -239,7 +247,7 @@ DECLARE @userId INT = (SELECT U.userId FROM Chat.[User] U WHERE U.handle = @user
 SELECT U.[name] AS userName,
 	U.handle AS userHandle,
 	I.imageUrl AS userImage,
-	U.bio AS userBio
+	U.bio
 FROM Chat.[User] U 
 	INNER JOIN Chat.Follower F ON @userId = F.followerUserId
 		AND U.userId = F.followedUserId
@@ -257,13 +265,51 @@ DECLARE @userId INT = (SELECT U.userId FROM Chat.[User] U WHERE U.handle = @user
 SELECT U.[name] AS userName,
 	U.handle AS userHandle,
 	I.imageUrl AS userImage,
-	U.bio AS userBio
+	U.bio
 FROM Chat.[User] U 
 	INNER JOIN Chat.Follower F ON @userId = F.followedUserId
 		AND U.userId = F.followerUserId
 	INNER JOIN Chat.[Image] I ON U.imageId = I.imageId
 ORDER BY F.followDate DESC
 OFFSET (@page * 20) ROWS FETCH NEXT 20 ROWS ONLY
+GO
+
+CREATE OR ALTER PROCEDURE Chat.FetchUserProfile
+	@userHandle NVARCHAR(30)
+AS
+DECLARE @userId INT = (SELECT U.userId FROM Chat.[User] U WHERE U.handle = @userHandle);
+SELECT I.imageUrl AS userImage,
+	U.[name] AS userName,
+	@userHandle AS userHandle,
+	U.bio,
+	U.createdDate,
+	U.ethereumAddress,
+	COUNT(DISTINCT F.followerUserId) AS followerCount,
+	COUNT(DISTINCT F2.followedUserId) AS followingCount,
+	JSON_QUERY((
+		SELECT P.postId,
+			P.content,
+			COUNT(DISTINCT L.userId) AS likeCount,
+			COUNT(DISTINCT P2.postId) AS commentCount,
+			JSON_QUERY(Chat.FetchImages(P.postId)) AS images,
+			P.createdOn,
+			IIF(L2.userId IS NULL, 0, 1) AS isLiked
+		FROM Chat.Post P
+			LEFT JOIN Chat.[Like] L ON P.postId = L.postId
+			LEFT JOIN Chat.Post P2 ON P.postId = P2.replyToPostId
+			LEFT JOIN Chat.[Like] L2 ON P.postId = L2.postId
+				AND L2.userId = @userId
+		WHERE P.userId = @userId AND P.replyToPostId IS NULL
+		GROUP BY P.postId, P.content, P.createdOn, L2.userId
+		ORDER BY P.createdOn DESC
+		FOR JSON PATH
+	)) AS posts
+	FROM Chat.[User] U
+		LEFT JOIN Chat.Follower F ON U.userId = F.followedUserId
+		LEFT JOIN Chat.Follower F2 ON U.userId = F2.followerUserId
+		INNER JOIN Chat.[Image] I ON U.imageId = I.imageId
+	WHERE U.userId = @userId
+	GROUP BY I.imageUrl, U.[name], U.bio, U.createdDate, U.ethereumAddress
 GO
 
 --Functions
@@ -278,13 +324,13 @@ CREATE FUNCTION Chat.FetchImages(@postId INT)
 RETURNS NVARCHAR(MAX)
 AS
 BEGIN
-RETURN(
+RETURN (
 	SELECT I.imageUrl, P.aspectRatio
 	FROM Chat.PostImage P
 	JOIN Chat.[Image] I ON I.imageId = P.imageId
 	WHERE P.postId = @postId
 	FOR JSON PATH
-)
+	)
 END
 GO
 
@@ -334,7 +380,7 @@ RETURN
 		P.content,
 		COUNT(DISTINCT L.userId) AS likeCount,
 		COUNT(DISTINCT P2.postId) AS commentCount,
-		Chat.FetchImages(P.postId) AS imageUrls,
+		JSON_QUERY(Chat.FetchImages(P.postId)) AS imageUrls,
 		IIF(L2.userId IS NULL, 0, 1) AS isLiked,
 		P.createdOn
 	FROM Chat.Post P
@@ -415,7 +461,10 @@ VALUES (1, 'quisque ut erat curabitur gravida nisi at nibh in hac habitasse plat
 INSERT Chat.Post (userId, content, replyToPostId)
 VALUES (1, 'quisque ut erat curabitur gravida nisi at nibh in hac habitasse platea dictumst', 1),
 (1, 'ante ipsum primis in faucibus orci luctus et ultrices posuere cubilia curae donec pharetra magna vestibulum aliquet ultrices erat', 1),
-(1, 'ante ipsum primis in faucibus orci luctus et ultrices posuere cubilia curae donec pharetra magna vestibulum aliquet ultrices erat', 1)
+(1, 'ante ipsum primis in faucibus orci luctus et ultrices posuere cubilia curae donec pharetra magna vestibulum aliquet ultrices erat', 1),
+(7, 'Awesome post!', 10),
+(7, 'Test comment', 10),
+(7, 'test comment 2!', 10)
 
 	--Comments to comments
 DECLARE @PostComment INT = @@IDENTITY
@@ -434,10 +483,12 @@ VALUES(1, 2), (1, 3), (1, 4), (2, 2), (2, 3), (10, 2), (10, 1), (10, 4), (@PostC
 	--Followers
 INSERT INTO Chat.Follower(followedUserId, followerUserId)
 VALUES(1, 2), (2, 1), (1, 3), (3, 1), (5, 6)
-
 	--Post Image
 INSERT INTO Chat.[Image](imageUrl, publicId)
 VALUES('https://res.cloudinary.com/dwg1i9w2u/image/upload/v1673400247/item_images/pihzt8aa2r2fo3va0yfx.png', N'543')
 
 INSERT INTO Chat.PostImage(imageId, postId, aspectRatio)
 VALUES(1, 1, 1.777)
+
+INSERT INTO Chat.Follower(followedUserId, followerUserId)
+VALUES(7, 1)
