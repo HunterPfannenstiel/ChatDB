@@ -116,13 +116,15 @@ AS
 IF @deleteImages = 1
 	BEGIN
 		SET @deletedImages = (
-			SELECT I.imageId,
-				I.publicId
+			SELECT I.publicId
 			FROM Chat.[Image] I 
 				INNER JOIN Chat.PostImage P ON I.imageId = P.imageId
 			WHERE P.postId = @postId
 			FOR JSON PATH
 		)
+		DELETE Chat.PostImage
+		WHERE postId = @postId
+
 		DELETE I
 		FROM Chat.[Image] I
 		WHERE EXISTS (
@@ -143,10 +145,15 @@ IF EXISTS (SELECT * FROM @images)
 		FROM Chat.[Image] I
 			INNER JOIN @images IT ON I.publicId = IT.publicId
 	END
-	UPDATE Chat.Post
-	SET content = @content
-	WHERE postId = @postId
+UPDATE Chat.Post
+SET content = @content
+WHERE postId = @postId
 GO
+
+DECLARE @deletedPosts NVARCHAR(MAX);
+DECLARE @images IMAGES;
+EXEC Chat.UpdatePost 1, "new content", @images, 1, @deletedPosts OUTPUT
+SELECT @deletedPosts
 
 EXEC Chat.FetchFollowing 'rhyams1', 0
 
