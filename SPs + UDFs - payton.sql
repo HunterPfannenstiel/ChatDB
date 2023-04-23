@@ -79,8 +79,8 @@ SELECT I.imageUrl AS userImage,
 	U.bio,
 	U.createdDate,
 	U.ethereumAddress,
-	COUNT(DISTINCT F.followerUserId) AS followerCount,
-	COUNT(DISTINCT F2.followedUserId) AS followingCount,
+	Chat.FetchFollowingCount(U.userId) AS followingCount,
+		Chat.FetchFollowerCount(U.userId) AS followerCount,
 	(
 		SELECT P.postId,
 			P.content,
@@ -99,11 +99,8 @@ SELECT I.imageUrl AS userImage,
 		FOR JSON PATH
 	) AS posts
 	FROM Chat.[User] U
-		LEFT JOIN Chat.Follower F ON U.userId = F.followedUserId
-		LEFT JOIN Chat.Follower F2 ON U.userId = F2.followerUserId
 		INNER JOIN Chat.[Image] I ON U.imageId = I.imageId
 	WHERE U.userId = @userId
-	GROUP BY I.imageUrl, U.[name], U.bio, U.createdDate, U.ethereumAddress
 GO
 
 CREATE OR ALTER PROCEDURE Chat.UpdatePost
@@ -150,6 +147,60 @@ SET content = @content
 WHERE postId = @postId
 GO
 
+CREATE OR ALTER FUNCTION Chat.FilterUsers (
+	@searcher INT,
+	@filter NVARCHAR(30)
+)
+RETURNS TABLE
+AS
+RETURN
+	SELECT U.[name] AS userName,
+		U.handle AS userHandle,
+		I.imageUrl AS userImage,
+		U.bio AS userBio,
+		Chat.FetchFollowingCount(U.userId) AS followingCount,
+		Chat.FetchFollowerCount(U.userId) AS followerCount,
+		IIF(F.followedUserId IS NULL, 0, 1) AS isFollowing
+	FROM Chat.[User] U
+		INNER JOIN Chat.[Image] I ON U.imageId = I.imageId
+		LEFT JOIN Chat.[Follower] F ON U.userId = F.followedUserId
+			AND F.followerUserId = @searcher
+	WHERE U.[name] LIKE '%' + @filter + '%'
+GO
+
+CREATE OR ALTER FUNCTION Chat.FetchFollowingCount (
+	@userId INT
+)
+RETURNS INT
+AS
+BEGIN
+RETURN (
+	SELECT COUNT(*)
+	FROM Chat.Follower F
+	WHERE F.followerUserId = @userId
+)
+END
+GO
+
+CREATE OR ALTER FUNCTION Chat.FetchFollowerCount (
+	@userId INT
+)
+RETURNS INT
+AS
+BEGIN
+RETURN (
+	SELECT COUNT(*)
+	FROM Chat.Follower F
+	WHERE F.followedUserId = @userId
+)
+END
+GO
+
+SELECT *
+FROM Chat.FilterUsers(1, 'gar')
+
+SELECT Chat.FetchFollowingCount(1)
+
 DECLARE @deletedPosts NVARCHAR(MAX);
 DECLARE @images IMAGES;
 EXEC Chat.UpdatePost 1, "new content", @images, 1, @deletedPosts OUTPUT
@@ -173,4 +224,4 @@ FROM Chat.Follower;
 
 SELECT U.[name], U.userId, U.handle
 FROM Chat.[User] U 
-WHERE U.userId = 1;
+WHERE U.userId = 1 OR U.userId = 2;
