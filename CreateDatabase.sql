@@ -301,7 +301,9 @@ GO
 --'FetchFollowing' means fetch the users that @userId follows.
 CREATE OR ALTER PROCEDURE Chat.FetchFollowing
 	@userHandle NVARCHAR(30),
-	@page INT
+	@queryUserId INT,
+	@page INT,
+	@createdDateTime DATETIMEOFFSET
 AS
 DECLARE @userId INT = (SELECT U.userId FROM Chat.[User] U WHERE U.handle = @userHandle);
 SELECT U.[name] AS userName,
@@ -310,11 +312,13 @@ SELECT U.[name] AS userName,
 	U.userId AS userId,
 	U.bio,
 	Chat.FetchFollowerCount(@userId) AS followerCount,
-	Chat.FetchFollowingCount(@userId) AS followingCount
+	Chat.FetchFollowingCount(@userId) AS followingCount,
+	Chat.IsUserFollowing(@queryUserId, U.userId) AS isFollowing
 FROM Chat.[User] U 
-	INNER JOIN Chat.Follower F ON @userId = F.followerUserId
+	LEFT JOIN Chat.Follower F ON @userId = F.followerUserId
 		AND U.userId = F.followedUserId
 	INNER JOIN Chat.[Image] I ON U.imageId = I.imageId
+WHERE F.followDate <= @createdDateTime
 ORDER BY F.followDate DESC
 OFFSET (@page * 20) ROWS FETCH NEXT 20 ROWS ONLY
 GO
@@ -322,7 +326,9 @@ GO
 --'FetchFollowers' means fetch the users that follow @userId.
 CREATE OR ALTER PROCEDURE Chat.FetchFollowers
 	@userHandle NVARCHAR(30),
-	@page INT
+	@queryUserId INT,
+	@page INT,
+	@createdDateTime DATETIMEOFFSET
 AS
 DECLARE @userId INT = (SELECT U.userId FROM Chat.[User] U WHERE U.handle = @userHandle);
 SELECT U.[name] AS userName,
@@ -330,14 +336,13 @@ SELECT U.[name] AS userName,
 	I.imageUrl AS userImage,
 	U.userId AS userId,
 	U.bio,
-	IIF(F2.followedUserId IS NOT NULL, 1, 0) AS isFollowing,
 	Chat.FetchFollowerCount(@userId) AS followerCount,
 	Chat.FetchFollowingCount(@userId) AS followingCount
 FROM Chat.[User] U 
-	INNER JOIN Chat.Follower F ON @userId = F.followedUserId
+	LEFT JOIN Chat.Follower F ON @userId = F.followedUserId
 		AND U.userId = F.followerUserId
-	LEFT JOIN Chat.Follower F2 ON F2.followedUserId = F.followerUserId AND F2.followerUserId = @userId
 	INNER JOIN Chat.[Image] I ON U.imageId = I.imageId
+WHERE F.followDate <= @createdDateTime
 ORDER BY F.followDate DESC
 OFFSET (@page * 20) ROWS FETCH NEXT 20 ROWS ONLY
 GO
@@ -565,7 +570,8 @@ GO
 --NOTE: Limit the amount of posts to 10 for each stored procedure call.
 CREATE OR ALTER PROCEDURE Chat.GetUserPosts
     @userId INT,
-    @page INT
+    @page INT,
+	@createdDateTime DATETIMEOFFSET
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -576,6 +582,7 @@ BEGIN
     SELECT Post.postId, Post.content, Post.replyToPostId, Post.isPinned, Post.createdOn
     FROM Chat.Post
     WHERE Post.userId = @userId
+		AND Post.createdOn <= @createdDateTime
     ORDER BY Post.createdOn DESC
     OFFSET @offset ROWS
     FETCH NEXT @pageSize ROWS ONLY
@@ -651,7 +658,8 @@ GO
 CREATE OR ALTER FUNCTION Chat.FetchPostComments (
 	@postId INT,
 	@userId INT,
-	@page INT
+	@page INT,
+	@createdDateTime DATETIMEOFFSET
 )
 RETURNS TABLE
 AS
@@ -673,8 +681,8 @@ RETURN
 		INNER JOIN Chat.[Image] I ON U.imageId = I.imageId
 		LEFT JOIN Chat.[Like] L2 ON @userId = L2.userId
 			AND P.postId = L2.postId
-	WHERE P.replyToPostId = @postId 
-		OR P.postId = @postId
+	WHERE P.createdOn <= @createdDateTime 
+		AND (P.replyToPostId = @postId OR P.postId = @postId)
 	GROUP BY U.[name], U.handle, I.imageUrl, P.postId, P.content, L2.userId, P.createdOn
 	ORDER BY P.postId
 	OFFSET (@page * 15) ROWS FETCH NEXT 15 ROWS ONLY
@@ -682,7 +690,8 @@ GO
 
 CREATE OR ALTER FUNCTION Chat.FetchFeedPage (
 	@userId INT, 
-	@page INT
+	@page INT,
+	@createdDateTime DATETIMEOFFSET
 )
 RETURNS TABLE
 AS
@@ -698,6 +707,7 @@ RETURN(
 	JOIN Chat.[User] U ON U.userId = P.userId
 	JOIN Chat.[Image] I ON I.imageId = U.imageId
 	WHERE F.followerUserId = @userId
+		AND P.createdOn <= @createdDateTime
 	GROUP BY P.content, P.postId, P.createdOn, P.replyToPostId, U.[name], I.imageUrl, U.handle, IIF(UL.userId IS NOT NULL, 1, 0)
 	ORDER BY P.createdOn DESC
 	OFFSET @page * 10 ROWS
@@ -707,7 +717,8 @@ GO
 
 CREATE OR ALTER FUNCTION Chat.FetchGlobalFeed (
 	@page INT, 
-	@userId INT = 0
+	@userId INT = 0,
+	@createdDateTime DATETIMEOFFSET
 )
 RETURNS TABLE
 AS
@@ -721,6 +732,7 @@ RETURN(
 	LEFT JOIN Chat.Post R ON R.replyToPostId = P.postId
 	JOIN Chat.[User] U ON U.userId = P.userId
 	JOIN Chat.[Image] I ON I.imageId = U.imageId
+	WHERE P.createdOn <= @createdDateTime
 	GROUP BY P.content, P.postId, P.createdOn, P.replyToPostId, U.[name], I.imageUrl, U.handle, IIF(UL.userId IS NOT NULL, 1, 0)
 	ORDER BY P.createdOn DESC
 	OFFSET @page * 10 ROWS
