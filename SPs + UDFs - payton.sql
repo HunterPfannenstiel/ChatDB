@@ -339,3 +339,74 @@ FROM Chat.Follower;
 SELECT U.[name], U.userId, U.handle
 FROM Chat.[User] U 
 WHERE U.userId = 1 OR U.userId = 2;
+
+CREATE OR ALTER PROCEDURE Chat.UpdateUser
+    @userId INT,
+    @image IMAGES READONLY,
+    @bio NVARCHAR(150),
+    @handle NVARCHAR(30),
+    @name NVARCHAR(30),
+    @deletedImage NVARCHAR(100) OUTPUT
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+	DECLARE @newImageId INT;
+
+    -- Check if a new handle is provided and if it already exists
+    IF @handle IS NOT NULL
+    BEGIN
+        IF EXISTS (SELECT 1 FROM Chat.[User] WHERE handle = @handle AND userId != @userId)
+        BEGIN
+            RAISERROR('Handle already exists.', 16, 1);
+            RETURN;
+        END
+    END
+
+	--@image will be null if no new image is was supplied
+	IF EXISTS (SELECT * FROM @image)
+		--Store the old image's publicId so it can be deleted after the reference in Chat.User is removed
+		SET @deletedImage = (SELECT I.publicId FROM Chat.[User] U INNER JOIN Chat.[Image] I ON U.imageId = I.imageId WHERE U.userId = @userId)
+		--Insert the new image into Chat.Image
+		INSERT Chat.[Image] (imageUrl, publicId)
+		SELECT imageUrl,
+			publicId
+		FROM @image
+		SET @newImageId = @@IDENTITY
+		
+    -- Update user information
+    UPDATE Chat.[User]
+    SET imageId = COALESCE(@newImageId, imageId),
+        bio = COALESCE(@bio, bio),
+        handle = COALESCE(@handle, handle),
+        name = COALESCE(@name, name)
+    WHERE userId = @userId;
+
+	--If a new image was given, delete the old image
+	IF @deletedImage IS NOT NULL
+		DELETE Chat.PostImage
+		WHERE imageId = (SELECT imageId FROM Chat.[Image] WHERE publicId = @deletedImage)
+		DELETE Chat.[Image]
+		WHERE publicId = @deletedImage
+END
+GO
+
+SELECT [name],
+	bio,
+	handle,
+	imageId
+FROM Chat.[User]
+WHERE userId = 1
+GO
+DECLARE @image IMAGES, @deletedImage INT;
+INSERT @image (publicId, imageUrl, aspectRatio)
+VALUES ('7e', 'owififj', null);
+EXEC Chat.UpdateUser 1, @image, 'ksfsldf', 's;ofks;d', 'fartis0', @deletedImage OUTPUT
+GO
+SELECT [name],
+	bio,
+	handle,
+	imageId
+FROM Chat.[User]
+WHERE userId = 1
+GO
