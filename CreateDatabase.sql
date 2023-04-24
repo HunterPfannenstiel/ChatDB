@@ -162,6 +162,9 @@ DROP FUNCTION IF EXISTS Chat.FetchWeb3User;
 DROP FUNCTION IF EXISTS Chat.FetchEmailUser;
 DROP FUNCTION IF EXISTS Chat.FetchPostComments;
 DROP FUNCTION IF EXISTS Chat.FetchUser;
+DROP FUNCTION IF EXISTS Chat.FetchFollowerCount;
+DROP FUNCTION IF EXISTS Chat.FetchFollowingCount;
+DROP FUNCTION IF EXISTS Chat.IsUSerFollowing;
 DROP TYPE IF EXISTS IMAGES;
 GO
 
@@ -187,7 +190,7 @@ BEGIN
 END
 GO
 
---Have to create this function here because procedures need it
+--Have to create these functions here because procedures need it
 CREATE FUNCTION Chat.FetchImages(@postId INT)
 RETURNS NVARCHAR(MAX)
 AS
@@ -202,6 +205,51 @@ RETURN (
 END
 GO
 
+CREATE OR ALTER FUNCTION Chat.FetchFollowingCount (
+	@userId INT
+)
+RETURNS INT
+AS
+BEGIN
+RETURN (
+	SELECT COUNT(*)
+	FROM Chat.Follower F
+	WHERE F.followerUserId = @userId
+)
+END
+GO
+
+CREATE OR ALTER FUNCTION Chat.FetchFollowerCount (
+	@userId INT
+)
+RETURNS INT
+AS
+BEGIN
+RETURN (
+	SELECT COUNT(*)
+	FROM Chat.Follower F
+	WHERE F.followedUserId = @userId
+)
+END
+GO
+
+CREATE OR ALTER FUNCTION Chat.IsUserFollowing (
+	@viewerUserId INT,
+	@viewingUserId INT
+)
+RETURNS BIT
+AS
+BEGIN
+	DECLARE @isFollowing BIT;
+	IF EXISTS (SELECT * FROM Chat.Follower WHERE followedUserId = @viewingUserId AND followerUserId = @viewingUserId)
+		SET @isFollowing = 1;
+	ELSE
+		SET @isFollowing = 0;
+	RETURN @isFollowing;
+END
+GO
+
+--Beginning of procedures
 CREATE PROCEDURE Chat.CreatePost(@userId INT, @content NVARCHAR(280), @replyToPostId INT, @communityId INT, @images IMAGES READONLY)
 AS
 BEGIN
@@ -302,8 +350,9 @@ SELECT I.imageUrl AS userImage,
 	U.bio,
 	U.createdDate,
 	U.ethereumAddress,
-	COUNT(DISTINCT F.followerUserId) AS followerCount,
-	COUNT(DISTINCT F2.followedUserId) AS followingCount,
+	Chat.FetchFollowerCount(@userId) AS followerCount,
+	Chat.FetchFollowingCount(@userId) AS followingCount,
+	Chat.IsUserFollowing(@queryUserId, @userId) AS isFollowing,
 	JSON_QUERY((
 		SELECT P.postId,
 			P.content,
@@ -323,8 +372,6 @@ SELECT I.imageUrl AS userImage,
 		FOR JSON PATH
 	)) AS posts
 	FROM Chat.[User] U
-		LEFT JOIN Chat.Follower F ON U.userId = F.followedUserId
-		LEFT JOIN Chat.Follower F2 ON U.userId = F2.followerUserId
 		INNER JOIN Chat.[Image] I ON U.imageId = I.imageId
 	WHERE U.userId = @userId
 	GROUP BY I.imageUrl, U.[name], U.bio, U.createdDate, U.ethereumAddress
@@ -390,7 +437,10 @@ BEGIN
 END
 GO
 
-CREATE OR ALTER PROCEDURE Chat.FollowUser @followedUserId INT, @followerUserId INT, @follow INT
+CREATE OR ALTER PROCEDURE Chat.FollowUser 
+	@followedUserId INT, 
+	@followerUserId INT, 
+	@follow INT
 AS
 BEGIN
 	IF @follow = 1
@@ -402,7 +452,8 @@ BEGIN
 END
 GO
 
-CREATE OR ALTER PROCEDURE Chat.IsValidHandle(@handle NVARCHAR(30))
+CREATE OR ALTER PROCEDURE Chat.IsValidHandle
+	@handle NVARCHAR(30)
 AS
 IF EXISTS (SELECT * FROM Chat.[User] U WHERE U.handle = @handle)
     SELECT 0 AS isValidHandle
@@ -414,7 +465,7 @@ GO
 --Update User - INPUT: @userId, @image (IMAGE), @bio, @handle, @name, OUTPUT: @deletedImage (the publicId of the iamge that was replaced (if a new image was provided))
 CREATE OR ALTER PROCEDURE Chat.UpdateUser
     @userId INT,
-    @imagePublicId NVARCHAR(100),
+    @image IMAGES READONLY,
     @bio NVARCHAR(150),
     @handle NVARCHAR(30),
     @name NVARCHAR(30),
@@ -423,8 +474,7 @@ AS
 BEGIN
     SET NOCOUNT ON;
 
-    DECLARE @imageId INT;
-    DECLARE @publicId NVARCHAR(100);
+	DECLARE @newImageId INT;
 
     -- Check if a new handle is provided and if it already exists
     IF @handle IS NOT NULL
@@ -436,63 +486,32 @@ BEGIN
         END
     END
 
-    -- Check if a new image was provided
-    IF @imagePublicId IS NOT NULL
-    BEGIN
-        -- Get imageId of the image to set
-        SELECT @imageId = imageId, @publicId = publicId
-        FROM Chat.[Image]
-        WHERE publicId = @imagePublicId;
-
-        -- Raise an error if the image publicId is not found
-        IF @imageId IS NULL
-        BEGIN
-            RAISERROR('Image publicId not found.', 16, 1);
-            RETURN;
-        END
-    END
-    ELSE
-    BEGIN
-        -- Get imageId and publicId of the image the user currently has
-        SELECT @imageId = imageId, @publicId = publicId
-        FROM Chat.[Image]
-        WHERE imageId = (SELECT imageId FROM Chat.[User] WHERE userId = @userId);
-    END
-
+	--@image will be null if no new image is was supplied
+	IF EXISTS (SELECT * FROM @image)
+		--Store the old image's publicId so it can be deleted after the reference in Chat.User is removed
+		SET @deletedImage = (SELECT I.publicId FROM Chat.[User] U INNER JOIN Chat.[Image] I ON U.imageId = I.imageId WHERE U.userId = @userId)
+		--Insert the new image into Chat.Image
+		INSERT Chat.[Image] (imageUrl, publicId)
+		SELECT imageUrl,
+			publicId
+		FROM @image
+		SET @newImageId = @@IDENTITY
+		
     -- Update user information
     UPDATE Chat.[User]
-    SET imageId = COALESCE(@imageId, imageId),
+    SET imageId = COALESCE(@newImageId, imageId),
         bio = COALESCE(@bio, bio),
         handle = COALESCE(@handle, handle),
         name = COALESCE(@name, name)
     WHERE userId = @userId;
 
-    -- Update user image reference
-    IF @imageId IS NOT NULL
-    BEGIN
-        DECLARE @oldImageId INT;
-        SELECT @oldImageId = imageId FROM Chat.[User] WHERE userId = @userId;
-
-        IF @oldImageId IS NOT NULL
-        BEGIN
-            -- Check the number of users referencing the old image
-            DECLARE @userCount INT;
-            SELECT @userCount = COUNT(*) FROM Chat.[User] WHERE imageId = @oldImageId;
-
-            -- Delete old image if there are no other users referencing it
-            IF @userCount = 1
-            BEGIN
-                DELETE FROM Chat.[Image]
-                WHERE imageId = @oldImageId;
-            END
-        END
-
-        SET @deletedImage = @publicId;
-    END
-    ELSE
-    BEGIN
-        SET @deletedImage = NULL;
-    END
+	--If a new image was given, delete the old image
+	IF @deletedImage IS NOT NULL
+		--This delete from the PostImage table can be removed once the default inserted data is refactored to not have two users reference the same imageId
+		DELETE Chat.PostImage
+		WHERE imageId = (SELECT imageId FROM Chat.[Image] WHERE publicId = @deletedImage)
+		DELETE Chat.[Image]
+		WHERE publicId = @deletedImage
 END
 GO
 
@@ -559,6 +578,53 @@ BEGIN
 END
 GO
 
+CREATE OR ALTER PROCEDURE Chat.FetchUserPosts
+    @userHandle NVARCHAR(30),
+    @queryUserId INT = 0
+AS
+DECLARE @userId INT = (SELECT U.userId FROM Chat.[User] U WHERE U.handle = @userHandle);
+
+SELECT P.postId, 
+	P.content, 
+	P.createdOn,
+	Chat.IsUserFollowing(@queryUserId, @userId) AS isFollowing,
+	COUNT(DISTINCT L.userId) AS likeCount, 
+	COUNT(DISTINCT P2.postId) AS commentCount,
+    JSON_QUERY(Chat.FetchImages(P.postId)) AS images,
+    IIF(L2.userId IS NOT NULL, 1, 0) AS isLiked
+FROM Chat.Post P
+	LEFT JOIN Chat.[Like] L ON P.postId = L.postId
+	LEFT JOIN Chat.Post P2 ON P.postId = P2.replyToPostId
+	LEFT JOIN Chat.[Like] L2 ON P.postId = L2.postId
+		AND L2.userId = @queryUserId
+WHERE P.userId = @userId
+GROUP BY P.postId, P.content, P.createdOn, L2.userId
+ORDER BY P.createdOn DESC
+GO
+
+CREATE OR ALTER PROCEDURE Chat.FetchUserDetails(
+	@handle NVARCHAR(30), 
+	@queryUserId INT = 0
+)
+AS
+BEGIN
+DECLARE @userId INT = (SELECT U.userId FROM Chat.[User] U WHERE U.handle = @handle);
+SELECT I.imageUrl AS userImage,
+    U.[name] AS userName,
+    @handle AS userHandle,
+    @userId AS userId,
+    U.bio,
+    U.createdDate,
+    Chat.FetchFollowerCount(@userId) AS followerCount,
+    Chat.FetchFollowingCount(@userId) AS followingCount,
+	Chat.IsUserFollowing(@queryUserId, @userId) AS isFollowing
+        FROM Chat.[User] U
+        INNER JOIN Chat.[Image] I ON U.imageId = I.imageId
+    WHERE U.userId = @userId
+    GROUP BY I.imageUrl, U.[name], U.bio, U.createdDate, U.ethereumAddress
+END
+GO
+
 --Functions
 
 CREATE FUNCTION Chat.FetchWeb3User(@ethereumAddress NVARCHAR(64))
@@ -610,7 +676,10 @@ RETURN
 	OFFSET (@page * 15) ROWS FETCH NEXT 15 ROWS ONLY
 GO
 
-CREATE OR ALTER FUNCTION Chat.FetchFeedPage(@userId INT, @page INT)
+CREATE OR ALTER FUNCTION Chat.FetchFeedPage (
+	@userId INT, 
+	@page INT
+)
 RETURNS TABLE
 AS
 RETURN(
@@ -632,7 +701,10 @@ RETURN(
 )
 GO
 
-CREATE OR ALTER FUNCTION Chat.FetchGlobalFeed(@page INT, @userId INT = 0)
+CREATE OR ALTER FUNCTION Chat.FetchGlobalFeed (
+	@page INT, 
+	@userId INT = 0
+)
 RETURNS TABLE
 AS
 RETURN(
@@ -652,7 +724,9 @@ RETURN(
 )
 GO
 
-CREATE OR ALTER FUNCTION Chat.FetchUser(@userId INT)
+CREATE OR ALTER FUNCTION Chat.FetchUser (
+	@userId INT
+)
 RETURNS TABLE
 AS
 RETURN (
@@ -665,34 +739,6 @@ RETURN (
 	WHERE U.userId = @userId
 	GROUP BY U.name, U.handle, I.imageUrl
 )
-GO
-
-CREATE OR ALTER FUNCTION Chat.FetchFollowingCount (
-	@userId INT
-)
-RETURNS INT
-AS
-BEGIN
-RETURN (
-	SELECT COUNT(*)
-	FROM Chat.Follower F
-	WHERE F.followerUserId = @userId
-)
-END
-GO
-
-CREATE OR ALTER FUNCTION Chat.FetchFollowerCount (
-	@userId INT
-)
-RETURNS INT
-AS
-BEGIN
-RETURN (
-	SELECT COUNT(*)
-	FROM Chat.Follower F
-	WHERE F.followedUserId = @userId
-)
-END
 GO
 
 CREATE OR ALTER FUNCTION Chat.FilterUsers (
@@ -708,11 +754,9 @@ RETURN
 		U.bio,
 		Chat.FetchFollowingCount(U.userId) AS followingCount,
 		Chat.FetchFollowerCount(U.userId) AS followerCount,
-		IIF(F.followedUserId IS NULL, 0, 1) AS isFollowing
+		Chat.IsUserFollowing(@searcher, U.userId) AS isFollowing
 	FROM Chat.[User] U
 		INNER JOIN Chat.[Image] I ON U.imageId = I.imageId
-		LEFT JOIN Chat.[Follower] F ON U.userId = F.followedUserId
-			AND F.followerUserId = @searcher
 	WHERE U.handle LIKE '%' + @filter + '%'
 	ORDER BY followerCount DESC
 	OFFSET 0 ROWS
@@ -754,6 +798,7 @@ INSERT INTO Chat.[User](name, handle, email, imageId, bio) VALUES ('cswenson3', 
 INSERT INTO Chat.[User](name, handle, email, imageId, bio) VALUES ('bstirrip4', 'fgribbell4', 'test@gmail.com', 5, 'University of Essex')
 INSERT INTO Chat.[User](name, handle, email, imageId, bio) VALUES ('gellams5', 'czarfati5', 'bburress5@photobucket.com', 6, 'Arizona Christian University')
 INSERT INTO Chat.[User](name, handle, email, imageId, bio) VALUES ('gellams5', 't', 'hunterstatek@gmail.com', 6, 'Arizona Christian University')
+INSERT INTO Chat.[User](name, handle, email, imageId, bio) VALUES ('admin', 'admin', 'pfannenstielpayton@gmail.com', 6, ':O')
 
 
 	--UserPosts
