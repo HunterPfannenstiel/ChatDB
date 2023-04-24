@@ -146,7 +146,7 @@ CREATE TABLE Chat.CommunityTag
 	CONSTRAINT PK_CommTag PRIMARY KEY (communityId, tagId)
 )
 
---Stored Procedures
+--Drop everything in one spot
 DROP PROCEDURE IF EXISTS Chat.CreateUser
 DROP PROCEDURE IF EXISTS Chat.CreatePost;
 DROP PROCEDURE IF EXISTS Chat.FetchFeed;
@@ -155,9 +155,17 @@ DROP PROCEDURE IF EXISTS Chat.FetchFollowing;
 DROP PROCEDURE IF EXISTS Chat.LikePost;
 DROP PROCEDURE IF EXISTS Chat.FollowUser;
 DROP PROCEDURE IF EXISTS Chat.IsValidHandle;
+DROP PROCEDURE IF EXISTS Chat.UpdatePost;
+DROP PROCEDURE IF EXISTS Chat.UpdateUser;
+DROP FUNCTION IF EXISTS Chat.FetchImages;
+DROP FUNCTION IF EXISTS Chat.FetchWeb3User;
+DROP FUNCTION IF EXISTS Chat.FetchEmailUser;
+DROP FUNCTION IF EXISTS Chat.FetchPostComments;
+DROP FUNCTION IF EXISTS Chat.FetchUser;
 DROP TYPE IF EXISTS IMAGES;
 GO
 
+--Stored Procedures
 CREATE TYPE IMAGES AS TABLE (
 	imageUrl NVARCHAR(500),
 	publicId NVARCHAR(100),
@@ -176,6 +184,21 @@ BEGIN
 	VALUES(@name, @handle, @imageId, @bio, @email, @ethereumAddress)
 
 	SET @userId = SCOPE_IDENTITY();
+END
+GO
+
+--Have to create this function here because procedures need it
+CREATE FUNCTION Chat.FetchImages(@postId INT)
+RETURNS NVARCHAR(MAX)
+AS
+BEGIN
+RETURN (
+	SELECT I.imageUrl, P.aspectRatio
+	FROM Chat.PostImage P
+	JOIN Chat.[Image] I ON I.imageId = P.imageId
+	WHERE P.postId = @postId
+	FOR JSON PATH
+	)
 END
 GO
 
@@ -471,6 +494,7 @@ BEGIN
         SET @deletedImage = NULL;
     END
 END
+GO
 
 ------Delete a User Post - INPUT: @postId, OUTPUT: none
 CREATE OR ALTER PROCEDURE Chat.DeleteUserPost
@@ -482,6 +506,8 @@ BEGIN
     DELETE FROM Chat.Post
     WHERE postId = @postId
 END
+GO
+
 ---------------Fetch all users who liked a post - INPUT: @postId, @page, OUTPUT: userName ('User.name'), userImage ('Image.imageUrl'), userHandle ('User.handle'), bio ('User.bio')
 --NOTE: We will want to only return ~20 users for each stored procedure call. Use OFFSET-FETCH with the @page parameter to return the correct users
 CREATE OR ALTER PROCEDURE Chat.GetUsersWhoLikedPost
@@ -509,6 +535,7 @@ BEGIN
     WHERE rownum > @offset AND rownum <= (@offset + @pageSize)
     ORDER BY rownum
 END
+GO
 
 --Fetch User Posts - INPUT: @userId, @page, OUTPUT: Same exact structure as the 'posts' array above except doesn't need to be JSON data (and we don't need to return 
 --the user info)
@@ -530,29 +557,9 @@ BEGIN
     OFFSET @offset ROWS
     FETCH NEXT @pageSize ROWS ONLY
 END
-
+GO
 
 --Functions
-DROP FUNCTION IF EXISTS Chat.FetchImages;
-DROP FUNCTION IF EXISTS Chat.FetchWeb3User;
-DROP FUNCTION IF EXISTS Chat.FetchEmailUser;
-DROP FUNCTION IF EXISTS Chat.FetchPostComments;
-DROP FUNCTION IF EXISTS Chat.FetchUser;
-GO
-
-CREATE FUNCTION Chat.FetchImages(@postId INT)
-RETURNS NVARCHAR(MAX)
-AS
-BEGIN
-RETURN (
-	SELECT I.imageUrl, P.aspectRatio
-	FROM Chat.PostImage P
-	JOIN Chat.[Image] I ON I.imageId = P.imageId
-	WHERE P.postId = @postId
-	FOR JSON PATH
-	)
-END
-GO
 
 CREATE FUNCTION Chat.FetchWeb3User(@ethereumAddress NVARCHAR(64))
 RETURNS TABLE
@@ -660,30 +667,6 @@ RETURN (
 )
 GO
 
-CREATE OR ALTER FUNCTION Chat.FilterUsers (
-	@searcher INT,
-	@filter NVARCHAR(30)
-)
-RETURNS TABLE
-AS
-RETURN
-	SELECT U.[name] AS userName,
-		U.handle AS userHandle,
-		I.imageUrl AS userImage,
-		U.bio,
-		Chat.FetchFollowingCount(U.userId) AS followingCount,
-		Chat.FetchFollowerCount(U.userId) AS followerCount,
-		IIF(F.followedUserId IS NULL, 0, 1) AS isFollowing
-	FROM Chat.[User] U
-		INNER JOIN Chat.[Image] I ON U.imageId = I.imageId
-		LEFT JOIN Chat.[Follower] F ON U.userId = F.followedUserId
-			AND F.followerUserId = @searcher
-	WHERE U.handle LIKE '%' + @filter + '%'
-	ORDER BY followerCount DESC
-	OFFSET 0 ROWS
-	FETCH FIRST 10 ROWS ONLY
-GO
-
 CREATE OR ALTER FUNCTION Chat.FetchFollowingCount (
 	@userId INT
 )
@@ -710,6 +693,30 @@ RETURN (
 	WHERE F.followedUserId = @userId
 )
 END
+GO
+
+CREATE OR ALTER FUNCTION Chat.FilterUsers (
+	@searcher INT,
+	@filter NVARCHAR(30)
+)
+RETURNS TABLE
+AS
+RETURN
+	SELECT U.[name] AS userName,
+		U.handle AS userHandle,
+		I.imageUrl AS userImage,
+		U.bio,
+		Chat.FetchFollowingCount(U.userId) AS followingCount,
+		Chat.FetchFollowerCount(U.userId) AS followerCount,
+		IIF(F.followedUserId IS NULL, 0, 1) AS isFollowing
+	FROM Chat.[User] U
+		INNER JOIN Chat.[Image] I ON U.imageId = I.imageId
+		LEFT JOIN Chat.[Follower] F ON U.userId = F.followedUserId
+			AND F.followerUserId = @searcher
+	WHERE U.handle LIKE '%' + @filter + '%'
+	ORDER BY followerCount DESC
+	OFFSET 0 ROWS
+	FETCH FIRST 10 ROWS ONLY
 GO
 
 --Types
