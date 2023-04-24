@@ -241,7 +241,7 @@ RETURNS BIT
 AS
 BEGIN
 	DECLARE @isFollowing BIT;
-	IF EXISTS (SELECT * FROM Chat.Follower WHERE followedUserId = @viewingUserId AND followerUserId = @viewingUserId)
+	IF EXISTS (SELECT * FROM Chat.Follower WHERE followedUserId = @viewingUserId AND followerUserId = @viewerUserId)
 		SET @isFollowing = 1;
 	ELSE
 		SET @isFollowing = 0;
@@ -308,7 +308,9 @@ SELECT U.[name] AS userName,
 	U.handle AS userHandle,
 	I.imageUrl AS userImage,
 	U.userId AS userId,
-	U.bio
+	U.bio,
+	Chat.FetchFollowerCount(@userId) AS followerCount,
+	Chat.FetchFollowingCount(@userId) AS followingCount
 FROM Chat.[User] U 
 	INNER JOIN Chat.Follower F ON @userId = F.followerUserId
 		AND U.userId = F.followedUserId
@@ -327,8 +329,10 @@ SELECT U.[name] AS userName,
 	U.handle AS userHandle,
 	I.imageUrl AS userImage,
 	U.userId AS userId,
+	U.bio,
 	IIF(F2.followedUserId IS NOT NULL, 1, 0) AS isFollowing,
-	U.bio
+	Chat.FetchFollowerCount(@userId) AS followerCount,
+	Chat.FetchFollowingCount(@userId) AS followingCount
 FROM Chat.[User] U 
 	INNER JOIN Chat.Follower F ON @userId = F.followedUserId
 		AND U.userId = F.followerUserId
