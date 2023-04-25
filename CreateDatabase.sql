@@ -156,6 +156,8 @@ DROP PROCEDURE IF EXISTS Chat.FollowUser;
 DROP PROCEDURE IF EXISTS Chat.IsValidHandle;
 DROP PROCEDURE IF EXISTS Chat.UpdatePost;
 DROP PROCEDURE IF EXISTS Chat.UpdateUser;
+DROP PROCEDURE IF EXISTS Chat.FetchLikedPosts;
+DROP PROCEDURE IF EXISTS Chat.FetchReplyPosts;
 DROP FUNCTION IF EXISTS Chat.IsUserFollowing;
 DROP FUNCTION IF EXISTS Chat.FetchImages;
 DROP FUNCTION IF EXISTS Chat.FetchWeb3User;
@@ -596,6 +598,62 @@ FROM Chat.Post P
 	LEFT JOIN Chat.[Like] L2 ON P.postId = L2.postId
 		AND L2.userId = @queryUserId
 WHERE P.userId = @userId AND P.createdOn <= @createdDateTime
+GROUP BY P.postId, P.content, P.createdOn, L2.userId
+ORDER BY P.createdOn DESC
+OFFSET @page * 10 ROWS
+FETCH NEXT 10 ROWS ONLY
+GO
+
+CREATE OR ALTER PROCEDURE Chat.FetchLikedPosts
+    @userHandle NVARCHAR(30),
+	@page INT,
+	@createdDateTime DATETIMEOFFSET,
+    @queryUserId INT = 0
+AS
+DECLARE @userId INT = (SELECT U.userId FROM Chat.[User] U WHERE U.handle = @userHandle);
+
+SELECT P.postId, 
+	P.content, 
+	P.createdOn,
+	Chat.IsUserFollowing(@queryUserId, @userId) AS isFollowing,
+	COUNT(DISTINCT L.userId) AS likeCount, 
+	COUNT(DISTINCT P2.postId) AS commentCount,
+    JSON_QUERY(Chat.FetchImages(P.postId)) AS images,
+    IIF(L2.userId IS NOT NULL, 1, 0) AS isLiked
+FROM Chat.Post P
+	LEFT JOIN Chat.[Like] L ON P.postId = L.postId
+	LEFT JOIN Chat.Post P2 ON P.postId = P2.replyToPostId
+	LEFT JOIN Chat.[Like] L2 ON P.postId = L2.postId
+		AND L2.userId = @queryUserId
+WHERE P.createdOn <= @createdDateTime AND L.userId = @userId
+GROUP BY P.postId, P.content, P.createdOn, L2.userId
+ORDER BY P.createdOn DESC
+OFFSET @page * 10 ROWS
+FETCH NEXT 10 ROWS ONLY
+GO
+
+CREATE OR ALTER PROCEDURE Chat.FetchReplyPosts
+    @userHandle NVARCHAR(30),
+	@page INT,
+	@createdDateTime DATETIMEOFFSET,
+    @queryUserId INT = 0
+AS
+DECLARE @userId INT = (SELECT U.userId FROM Chat.[User] U WHERE U.handle = @userHandle);
+
+SELECT P.postId, 
+	P.content, 
+	P.createdOn,
+	Chat.IsUserFollowing(@queryUserId, @userId) AS isFollowing,
+	COUNT(DISTINCT L.userId) AS likeCount, 
+	COUNT(DISTINCT P2.postId) AS commentCount,
+    JSON_QUERY(Chat.FetchImages(P.postId)) AS images,
+    IIF(L2.userId IS NOT NULL, 1, 0) AS isLiked
+FROM Chat.Post P
+	LEFT JOIN Chat.[Like] L ON P.postId = L.postId
+	LEFT JOIN Chat.Post P2 ON P.postId = P2.replyToPostId
+	LEFT JOIN Chat.[Like] L2 ON P.postId = L2.postId
+		AND L2.userId = @queryUserId
+WHERE P.createdOn <= @createdDateTime AND P.userId = @userId AND P.replyToPostId IS NOT NULL
 GROUP BY P.postId, P.content, P.createdOn, L2.userId
 ORDER BY P.createdOn DESC
 OFFSET @page * 10 ROWS
