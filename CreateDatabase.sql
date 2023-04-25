@@ -624,7 +624,7 @@ GO
 
 --Get a users stats: take in the user's userId/handle, calculate their total likes received/given, following/follower count, posts posted and replies received
 CREATE OR ALTER PROCEDURE Chat.FetchUserStats
-	@userHandle NVARCHAR(30)
+	@userHandle NVARCHAR(30), @queryUserId INT
 AS
 DECLARE @userId INT = (SELECT userId FROM Chat.[User] WHERE handle = @userHandle)
 SELECT U.[name] AS userName,
@@ -634,6 +634,7 @@ SELECT U.[name] AS userName,
 	COUNT(DISTINCT L2.postId) AS likesGiven,
 	Chat.FetchFollowerCount(@userId) AS followerCount,
 	Chat.FetchFollowingCount(@userId) AS followingCount,
+	Chat.IsUserFollowing(@queryUserId, @userId) AS isFollowing,
 	COUNT(DISTINCT P.postId) AS postsCreated,
 	COUNT(DISTINCT P2.postId) AS repliesReceived
 FROM Chat.[User] U
