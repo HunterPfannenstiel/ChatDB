@@ -149,7 +149,6 @@ CREATE TABLE Chat.CommunityTag
 --Drop everything in one spot
 DROP PROCEDURE IF EXISTS Chat.CreateUser
 DROP PROCEDURE IF EXISTS Chat.CreatePost;
-DROP PROCEDURE IF EXISTS Chat.FetchFeed;
 DROP PROCEDURE IF EXISTS Chat.FetchFollowers;
 DROP PROCEDURE IF EXISTS Chat.FetchFollowing;
 DROP PROCEDURE IF EXISTS Chat.LikePost;
@@ -157,7 +156,7 @@ DROP PROCEDURE IF EXISTS Chat.FollowUser;
 DROP PROCEDURE IF EXISTS Chat.IsValidHandle;
 DROP PROCEDURE IF EXISTS Chat.UpdatePost;
 DROP PROCEDURE IF EXISTS Chat.UpdateUser;
-DROP PROCEDURE IF EXISTS Chat.FetchUserStats;
+DROP FUNCTION IF EXISTS Chat.IsUserFollowing;
 DROP FUNCTION IF EXISTS Chat.FetchImages;
 DROP FUNCTION IF EXISTS Chat.FetchWeb3User;
 DROP FUNCTION IF EXISTS Chat.FetchEmailUser;
@@ -286,7 +285,7 @@ GO
 --'FetchFollowing' means fetch the users that @userId follows.
 CREATE OR ALTER PROCEDURE Chat.FetchFollowing
 	@userHandle NVARCHAR(30),
-	@queryUserId INT,
+	@queryUserId INT = 0,
 	@page INT,
 	@createdDateTime DATETIMEOFFSET
 AS
@@ -622,7 +621,6 @@ SELECT I.imageUrl AS userImage,
 END
 GO
 
---Get a users stats: take in the user's userId/handle, calculate their total likes received/given, following/follower count, posts posted and replies received
 CREATE OR ALTER PROCEDURE Chat.FetchUserStats
 	@userHandle NVARCHAR(30), @queryUserId INT
 AS
@@ -727,6 +725,8 @@ RETURN(
 )
 GO
 
+
+
 CREATE OR ALTER FUNCTION Chat.FetchGlobalFeed (
 	@page INT, 
 	@userId INT = 0,
@@ -777,6 +777,7 @@ RETURNS TABLE
 AS
 RETURN
 	SELECT U.[name] AS userName,
+		U.userId,
 		U.handle AS userHandle,
 		I.imageUrl AS userImage,
 		U.bio,
@@ -866,9 +867,7 @@ VALUES (1, 'vestibulum quam sapien varius ut blandit non interdum in ante vestib
 (2, 'blandit mi in porttitor pede justo eu massa donec dapibus duis at velit eu est congue elementum', 1),
 (2, 'in faucibus orci luctus et ultrices posuere cubilia curae nulla dapibus', @PostComment),
 (2, 'vulputate vitae nisl aenean lectus pellentesque eget nunc donec quis orci eget orci vehicula condimentum curabitur in libero', @PostComment),
-(2, 'imperdiet sapien urna pretium nisl ut volutpat sapien arcu sed augue aliquam erat volutpat in congue', @PostComment),
-(2, 'imperdiet sapien urna pretium nisl ut volutpat sapien arcu sed augue aliquam erat volutpat in congue', 1);
-
+(2, 'imperdiet sapien urna pretium nisl ut volutpat sapien arcu sed augue aliquam erat volutpat in congue', @PostComment);
 
 	--Post Likes
 INSERT INTO Chat.[Like](postId, userId)
