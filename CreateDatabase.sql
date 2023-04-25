@@ -157,6 +157,7 @@ DROP PROCEDURE IF EXISTS Chat.FollowUser;
 DROP PROCEDURE IF EXISTS Chat.IsValidHandle;
 DROP PROCEDURE IF EXISTS Chat.UpdatePost;
 DROP PROCEDURE IF EXISTS Chat.UpdateUser;
+DROP PROCEDURE IF EXISTS Chat.FetchUserStats;
 DROP FUNCTION IF EXISTS Chat.FetchImages;
 DROP FUNCTION IF EXISTS Chat.FetchWeb3User;
 DROP FUNCTION IF EXISTS Chat.FetchEmailUser;
@@ -279,22 +280,6 @@ SELECT U.name AS userName, U.handle AS userHandle, I.imageUrl AS userImage, @pos
 FROM Chat.[User] U
 JOIN Chat.[Image] I ON I.imageId = U.imageId
 WHERE U.userId = @userId
-END
-GO
-
-CREATE PROCEDURE Chat.FetchFeed(@userId INT) 
-AS
-BEGIN
-	SELECT U.[name] AS userName, I.imageUrl AS userImage, U.handle AS userHandle, COUNT(DISTINCT Followed.followedUserId) AS followerCount, COUNT(DISTINCT [Following].followerUserId) AS followingCount,
-	(SELECT * FROM Chat.FetchFeedPage(@userId, 0)
-		FOR JSON PATH)
-	 AS posts
-	FROM Chat.[User] U
-	JOIN Chat.[Image] I ON I.imageId = U.imageId
-	LEFT JOIN Chat.[Follower] Followed ON Followed.followedUserId = @userId
-	LEFT JOIN Chat.[Follower] [Following] ON [Following].followerUserId = @userId
-	WHERE U.userId = @userId
-	GROUP BY U.[name], I.imageUrl, U.handle
 END
 GO
 
@@ -636,6 +621,30 @@ SELECT I.imageUrl AS userImage,
 END
 GO
 
+--Get a users stats: take in the user's userId/handle, calculate their total likes received/given, following/follower count, posts posted and replies received
+CREATE OR ALTER PROCEDURE Chat.FetchUserStats
+	@userHandle NVARCHAR(30)
+AS
+DECLARE @userId INT = (SELECT userId FROM Chat.[User] WHERE handle = @userHandle)
+SELECT U.[name] AS userName,
+	U.bio,
+	I.imageUrl,
+	COUNT(DISTINCT L.userId) AS likesReceived,
+	COUNT(DISTINCT L2.postId) AS likesGiven,
+	Chat.FetchFollowerCount(@userId) AS followerCount,
+	Chat.FetchFollowingCount(@userId) AS followingCount,
+	COUNT(DISTINCT P.postId) AS postsCreated,
+	COUNT(DISTINCT P2.postId) AS repliesReceived
+FROM Chat.[User] U
+	LEFT JOIN Chat.Post P ON U.userId = P.userId
+	LEFT JOIN Chat.[Like] L ON P.postId = L.postId
+	LEFT JOIN Chat.[Like] L2 ON U.userId = L2.userId
+	LEFT JOIN Chat.Post P2 ON P.postId = P2.replyToPostId
+	INNER JOIN Chat.[Image] I ON U.imageId = I.imageId
+WHERE U.userId = @userId
+GROUP BY U.[name], bio, imageUrl
+GO
+
 --Functions
 
 CREATE FUNCTION Chat.FetchWeb3User(@ethereumAddress NVARCHAR(64))
@@ -854,7 +863,9 @@ VALUES (1, 'vestibulum quam sapien varius ut blandit non interdum in ante vestib
 (2, 'blandit mi in porttitor pede justo eu massa donec dapibus duis at velit eu est congue elementum', 1),
 (2, 'in faucibus orci luctus et ultrices posuere cubilia curae nulla dapibus', @PostComment),
 (2, 'vulputate vitae nisl aenean lectus pellentesque eget nunc donec quis orci eget orci vehicula condimentum curabitur in libero', @PostComment),
-(2, 'imperdiet sapien urna pretium nisl ut volutpat sapien arcu sed augue aliquam erat volutpat in congue', @PostComment);
+(2, 'imperdiet sapien urna pretium nisl ut volutpat sapien arcu sed augue aliquam erat volutpat in congue', @PostComment),
+(2, 'imperdiet sapien urna pretium nisl ut volutpat sapien arcu sed augue aliquam erat volutpat in congue', 1);
+
 
 	--Post Likes
 INSERT INTO Chat.[Like](postId, userId)
