@@ -311,7 +311,7 @@ GO
 --'FetchFollowers' means fetch the users that follow @userId.
 CREATE OR ALTER PROCEDURE Chat.FetchFollowers
 	@userHandle NVARCHAR(30),
-	@queryUserId INT,
+	@queryUserId INT = 0,
 	@page INT,
 	@createdDateTime DATETIMEOFFSET
 AS
@@ -322,7 +322,8 @@ SELECT U.[name] AS userName,
 	U.userId AS userId,
 	U.bio,
 	Chat.FetchFollowerCount(@userId) AS followerCount,
-	Chat.FetchFollowingCount(@userId) AS followingCount
+	Chat.FetchFollowingCount(@userId) AS followingCount,
+	Chat.IsUserFollowing(@queryUserId, U.userId) AS isFollowing
 FROM Chat.[User] U 
 	LEFT JOIN Chat.Follower F ON @userId = F.followedUserId
 		AND U.userId = F.followerUserId
