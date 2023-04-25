@@ -576,6 +576,8 @@ GO
 
 CREATE OR ALTER PROCEDURE Chat.FetchUserPosts
     @userHandle NVARCHAR(30),
+	@page INT,
+	@createdDateTime DATETIMEOFFSET,
     @queryUserId INT = 0
 AS
 DECLARE @userId INT = (SELECT U.userId FROM Chat.[User] U WHERE U.handle = @userHandle);
@@ -593,9 +595,11 @@ FROM Chat.Post P
 	LEFT JOIN Chat.Post P2 ON P.postId = P2.replyToPostId
 	LEFT JOIN Chat.[Like] L2 ON P.postId = L2.postId
 		AND L2.userId = @queryUserId
-WHERE P.userId = @userId
+WHERE P.userId = @userId AND P.createdOn <= @createdDateTime
 GROUP BY P.postId, P.content, P.createdOn, L2.userId
 ORDER BY P.createdOn DESC
+OFFSET @page * 10 ROWS
+FETCH NEXT 10 ROWS ONLY
 GO
 
 CREATE OR ALTER PROCEDURE Chat.FetchUserDetails(
