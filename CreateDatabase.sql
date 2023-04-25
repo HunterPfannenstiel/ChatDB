@@ -640,6 +640,7 @@ FROM Chat.[User] U
 	LEFT JOIN Chat.[Like] L ON P.postId = L.postId
 	LEFT JOIN Chat.[Like] L2 ON U.userId = L2.userId
 	LEFT JOIN Chat.Post P2 ON P.postId = P2.replyToPostId
+		AND P2.userId <> @userId
 	INNER JOIN Chat.[Image] I ON U.imageId = I.imageId
 WHERE U.userId = @userId
 GROUP BY U.[name], bio, imageUrl
