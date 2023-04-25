@@ -612,7 +612,7 @@ CREATE OR ALTER PROCEDURE Chat.FetchLikedPosts
 AS
 DECLARE @userId INT = (SELECT U.userId FROM Chat.[User] U WHERE U.handle = @userHandle);
 
-SELECT P.postId, 
+SELECT U.name AS userName, U.handle AS userHandle, I.imageUrl AS userImage, P.postId, 
 	P.content, 
 	P.createdOn,
 	Chat.IsUserFollowing(@queryUserId, @userId) AS isFollowing,
@@ -625,8 +625,10 @@ FROM Chat.Post P
 	LEFT JOIN Chat.Post P2 ON P.postId = P2.replyToPostId
 	LEFT JOIN Chat.[Like] L2 ON P.postId = L2.postId
 		AND L2.userId = @queryUserId
+	JOIN Chat.[User] U ON U.userId = P.userId
+	JOIN Chat.[Image] I ON I.imageId = U.imageId
 WHERE P.createdOn <= @createdDateTime AND L.userId = @userId
-GROUP BY P.postId, P.content, P.createdOn, L2.userId
+GROUP BY P.postId, P.content, P.createdOn, L2.userId, U.name, U.handle, I.imageUrl
 ORDER BY P.createdOn DESC
 OFFSET @page * 10 ROWS
 FETCH NEXT 10 ROWS ONLY
@@ -727,7 +729,7 @@ RETURN (SELECT U.userId
 GO
 
 --@userId is the user who is viewing the page.
-CREATE OR ALTER FUNCTION Chat.FetchPostComments (
+CREATE OR ALTER FUNCTION Chat.FetchComments (
 	@postId INT,
 	@userId INT,
 	@page INT,
@@ -753,11 +755,38 @@ RETURN
 		INNER JOIN Chat.[Image] I ON U.imageId = I.imageId
 		LEFT JOIN Chat.[Like] L2 ON @userId = L2.userId
 			AND P.postId = L2.postId
-	WHERE P.createdOn <= @createdDateTime 
-		AND (P.replyToPostId = @postId OR P.postId = @postId)
+	WHERE P.createdOn <= @createdDateTime AND P.replyToPostId = @postId
 	GROUP BY U.[name], U.handle, I.imageUrl, P.postId, P.content, L2.userId, P.createdOn
 	ORDER BY P.postId
-	OFFSET (@page * 15) ROWS FETCH NEXT 15 ROWS ONLY
+	OFFSET @page * 15 ROWS FETCH NEXT 15 ROWS ONLY
+GO
+
+CREATE OR ALTER FUNCTION Chat.FetchPost (
+	@postId INT,
+	@userId INT
+)
+RETURNS TABLE
+AS
+RETURN
+	SELECT U.[name] AS userName,
+		U.handle AS userHandle,
+		I.imageUrl AS userImage,
+		P.postId,
+		P.content,
+		COUNT(DISTINCT L.userId) AS likeCount,
+		COUNT(DISTINCT P2.postId) AS commentCount,
+		JSON_QUERY(Chat.FetchImages(P.postId)) AS images,
+		IIF(L2.userId IS NULL, 0, 1) AS isLiked,
+		P.createdOn
+	FROM Chat.Post P
+		LEFT JOIN Chat.[Like] L ON P.postId = L.postId
+		LEFT JOIN Chat.Post P2 ON P.postId = P2.replyToPostId
+		INNER JOIN Chat.[User] U ON P.userId = U.userId
+		INNER JOIN Chat.[Image] I ON U.imageId = I.imageId
+		LEFT JOIN Chat.[Like] L2 ON @userId = L2.userId
+			AND P.postId = L2.postId
+	WHERE P.postId = @postId
+	GROUP BY U.[name], U.handle, I.imageUrl, P.postId, P.content, L2.userId, P.createdOn
 GO
 
 CREATE OR ALTER FUNCTION Chat.FetchFeedPage (
@@ -886,10 +915,9 @@ INSERT INTO Chat.[User](name, handle, ethereumAddress, imageId, bio) VALUES ('fa
 INSERT INTO Chat.[User](name, handle, email, imageId, bio) VALUES ('garkill1', 'rhyams1', 'gdyne1@shinystat.com', 2, 'Pace University')
 INSERT INTO Chat.[User](name, handle, ethereumAddress, imageId, bio) VALUES ('njarmain2', 'edelaperrelle2', '0x3848cc6af7eb069b26f479b3d1d140f94ad2438b', 3, 'Universidad Nicaragüense de Ciencia y Tecnológica')
 INSERT INTO Chat.[User](name, handle, email, imageId, bio) VALUES ('cswenson3', 'nesp3', 'gbeaument3@berkeley.edu', 4, 'Creighton University')
-INSERT INTO Chat.[User](name, handle, email, imageId, bio) VALUES ('bstirrip4', 'fgribbell4', 'test@gmail.com', 5, 'University of Essex')
 INSERT INTO Chat.[User](name, handle, email, imageId, bio) VALUES ('gellams5', 'czarfati5', 'bburress5@photobucket.com', 6, 'Arizona Christian University')
 INSERT INTO Chat.[User](name, handle, email, imageId, bio) VALUES ('gellams5', 't', 'hunterstatek@gmail.com', 6, 'Arizona Christian University')
-INSERT INTO Chat.[User](name, handle, email, imageId, bio) VALUES ('admin', 'admin', 'pfannenstielpayton@gmail.com', 6, ':O')
+INSERT INTO Chat.[User](name, handle, email, imageId, bio) VALUES ('admin', 'admin', 'pfannenstielpayton@gmail.com', 5, ':O')
 
 
 	--UserPosts
