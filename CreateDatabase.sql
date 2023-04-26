@@ -117,6 +117,7 @@ CREATE TABLE Chat.[Like]
 		REFERENCES Chat.[User](userId),
 	postId INT FOREIGN KEY
 		REFERENCES Chat.Post(postId),
+	likedDate DATETIMEOFFSET NOT NULL DEFAULT SYSDATETIMEOFFSET(),
 	CONSTRAINT PK_Like PRIMARY KEY (userId, postId)
 )
 
@@ -158,6 +159,7 @@ DROP PROCEDURE IF EXISTS Chat.UpdatePost;
 DROP PROCEDURE IF EXISTS Chat.UpdateUser;
 DROP PROCEDURE IF EXISTS Chat.FetchLikedPosts;
 DROP PROCEDURE IF EXISTS Chat.FetchReplyPosts;
+DROP PROCEDURE IF EXISTS Chat.FetchMostActiveUsers
 DROP FUNCTION IF EXISTS Chat.IsUserFollowing;
 DROP FUNCTION IF EXISTS Chat.FetchImages;
 DROP FUNCTION IF EXISTS Chat.FetchWeb3User;
@@ -166,7 +168,6 @@ DROP FUNCTION IF EXISTS Chat.FetchPostComments;
 DROP FUNCTION IF EXISTS Chat.FetchUser;
 DROP FUNCTION IF EXISTS Chat.FetchFollowerCount;
 DROP FUNCTION IF EXISTS Chat.FetchFollowingCount;
-DROP FUNCTION IF EXISTS Chat.IsUSerFollowing;
 DROP TYPE IF EXISTS IMAGES;
 GO
 
@@ -708,6 +709,36 @@ FROM Chat.[User] U
 	INNER JOIN Chat.[Image] I ON U.imageId = I.imageId
 WHERE U.userId = @userId
 GROUP BY U.[name], bio, imageUrl
+GO
+
+CREATE OR ALTER PROCEDURE Chat.FetchMostActiveUsers
+	@queryUserId INT
+AS
+DECLARE @currentDate DATETIMEOFFSET = SYSDATETIMEOFFSET(); 
+DECLARE @previousDate DATETIMEOFFSET = DATEADD(DAY, -7, @currentDate);
+WITH cte_AggregateActivity(userId, postsMade, usersFollowed, likesGiven) AS (
+	SELECT U.userId,
+		COUNT(DISTINCT P.postId),
+		COUNT(DISTINCT F.followedUserId),
+		COUNT(DISTINCT L.postId)
+	FROM Chat.[User] U
+		LEFT JOIN Chat.Post P ON U.userId = P.userId
+			AND P.createdOn BETWEEN @previousDate AND @currentDate
+		LEFT JOIN Chat.Follower F ON U.userId = F.followerUserId
+			AND F.followDate BETWEEN @previousDate AND @currentDate
+		LEFT JOIN Chat.[Like] L ON U.userId = L.userId
+			AND L.likedDate BETWEEN @previousDate AND @currentDate
+	GROUP BY U.userId
+)
+SELECT TOP 10
+	U.userId,
+	Chat.IsUserFollowing(@queryUserId, U.userId) AS isFollowing,
+	SUM((C.postsMade * .70) + (C.usersFollowed * .20) + (C.likesGiven * .1)) AS activityWeight
+FROM Chat.[User] U
+	INNER JOIN cte_AggregateActivity C ON U.userId = C.userId
+WHERE U.createdDate BETWEEN DATEADD(DAY, -7, @currentDate) AND @currentDate
+GROUP BY U.userId
+ORDER BY activityWeight DESC
 GO
 
 --Functions
