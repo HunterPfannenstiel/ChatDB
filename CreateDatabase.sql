@@ -861,8 +861,10 @@ RETURN (
 GO
 
 CREATE OR ALTER FUNCTION Chat.FilterUsers (
-	@searcher INT,
-	@filter NVARCHAR(30)
+	@searcher INT = 0,
+	@filter NVARCHAR(30),
+	@page INT,
+	@createdDateTime DATETIMEOFFSET
 )
 RETURNS TABLE
 AS
@@ -877,9 +879,9 @@ RETURN
 		Chat.IsUserFollowing(@searcher, U.userId) AS isFollowing
 	FROM Chat.[User] U
 		INNER JOIN Chat.[Image] I ON U.imageId = I.imageId
-	WHERE U.handle LIKE '%' + @filter + '%'
+	WHERE U.handle LIKE '%' + @filter + '%' AND U.createdDate <= @createdDateTime
 	ORDER BY followerCount DESC
-	OFFSET 0 ROWS
+	OFFSET @page * 10 ROWS
 	FETCH FIRST 10 ROWS ONLY
 GO
 
