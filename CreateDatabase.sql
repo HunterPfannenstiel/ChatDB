@@ -598,7 +598,7 @@ FROM Chat.Post P
 	LEFT JOIN Chat.Post P2 ON P.postId = P2.replyToPostId
 	LEFT JOIN Chat.[Like] L2 ON P.postId = L2.postId
 		AND L2.userId = @queryUserId
-WHERE P.userId = @userId AND P.createdOn <= @createdDateTime
+WHERE P.userId = @userId AND P.replyToPostId IS NULL AND P.createdOn <= @createdDateTime
 GROUP BY P.postId, P.content, P.createdOn, L2.userId
 ORDER BY P.createdOn DESC
 OFFSET @page * 10 ROWS
@@ -768,7 +768,7 @@ GO
 --@userId is the user who is viewing the page.
 CREATE OR ALTER FUNCTION Chat.FetchComments (
 	@postId INT,
-	@userId INT,
+	@userId INT = 0,
 	@page INT,
 	@createdDateTime DATETIMEOFFSET
 )
@@ -794,13 +794,13 @@ RETURN
 			AND P.postId = L2.postId
 	WHERE P.createdOn <= @createdDateTime AND P.replyToPostId = @postId
 	GROUP BY U.[name], U.handle, I.imageUrl, P.postId, P.content, L2.userId, P.createdOn
-	ORDER BY P.postId
+	ORDER BY P.createdOn DESC
 	OFFSET @page * 15 ROWS FETCH NEXT 15 ROWS ONLY
 GO
 
 CREATE OR ALTER FUNCTION Chat.FetchPost (
 	@postId INT,
-	@userId INT
+	@userId INT = 0
 )
 RETURNS TABLE
 AS
@@ -1024,8 +1024,3 @@ VALUES('https://res.cloudinary.com/dwg1i9w2u/image/upload/v1673400247/item_image
 
 INSERT INTO Chat.PostImage(imageId, postId, aspectRatio)
 VALUES(1, 1, 1.777)
-
-SELECT * 
-FROM Chat.Follower F
-	INNER JOIN Chat.[User] U ON F.followerUserId = U.userId
-WHERE U.userId = 7
