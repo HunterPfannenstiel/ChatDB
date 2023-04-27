@@ -732,19 +732,18 @@ WITH cte_AggregateActivity(userId, postsMade, usersFollowed, likesGiven) AS (
 )
 SELECT TOP 10
 	U.[name] AS userName,
-		U.userId,
-		U.handle AS userHandle,
-		I.imageUrl AS userImage,
-		U.bio,
-		Chat.FetchFollowingCount(U.userId) AS followingCount,
-		Chat.FetchFollowerCount(U.userId) AS followerCount,
+	U.userId,
+	U.handle AS userHandle,
+	I.imageUrl AS userImage,
+	U.bio,
+	C.usersFollowed AS followingCount,
+	Chat.FetchFollowerCount(U.userId) AS followerCount,
 	Chat.IsUserFollowing(@queryUserId, U.userId) AS isFollowing,
 	SUM((C.postsMade * .70) + (C.usersFollowed * .20) + (C.likesGiven * .1)) AS activityWeight
 FROM Chat.[User] U
 	INNER JOIN cte_AggregateActivity C ON U.userId = C.userId
 	JOIN Chat.[Image] I ON I.imageId = U.imageId
-WHERE U.createdDate BETWEEN DATEADD(DAY, -7, @currentDate) AND @currentDate
-GROUP BY U.userId, U.[name], U.userId, U.handle, I.imageUrl, U.bio
+GROUP BY U.userId, U.[name], U.userId, U.handle, I.imageUrl, U.bio, C.usersFollowed
 ORDER BY activityWeight DESC
 GO
 
@@ -854,8 +853,6 @@ RETURN(
 )
 GO
 
-
-
 CREATE OR ALTER FUNCTION Chat.FetchGlobalFeed (
 	@page INT, 
 	@userId INT = 0,
@@ -864,8 +861,16 @@ CREATE OR ALTER FUNCTION Chat.FetchGlobalFeed (
 RETURNS TABLE
 AS
 RETURN(
-		SELECT U.[name] AS userName, I.imageUrl AS userImage, U.handle AS userHandle, P.content, P.postId, P.createdOn, P.replyToPostId, COUNT(DISTINCT L.userId) AS likeCount, COUNT(DISTINCT R.postId) AS commentCount, JSON_QUERY(Chat.FetchImages(P.postId)) AS images,
-	IIF(UL.userId IS NOT NULL, 1, 0) AS isLiked
+	SELECT U.[name] AS userName, 
+		I.imageUrl AS userImage, 
+		U.handle AS userHandle, 
+		P.content, 
+		P.postId, 
+		P.createdOn, 
+		P.replyToPostId, COUNT(DISTINCT L.userId) AS likeCount, 
+		COUNT(DISTINCT R.postId) AS commentCount, 
+		JSON_QUERY(Chat.FetchImages(P.postId)) AS images,
+		IIF(UL.userId IS NOT NULL, 1, 0) AS isLiked
 	FROM Chat.Post P
 	LEFT JOIN Chat.[Like] L ON L.postId = P.postId
 	LEFT JOIN Chat.[Like] UL ON UL.postId = P.postId 
@@ -874,7 +879,14 @@ RETURN(
 	JOIN Chat.[User] U ON U.userId = P.userId
 	JOIN Chat.[Image] I ON I.imageId = U.imageId
 	WHERE P.createdOn <= @createdDateTime
-	GROUP BY P.content, P.postId, P.createdOn, P.replyToPostId, U.[name], I.imageUrl, U.handle, IIF(UL.userId IS NOT NULL, 1, 0)
+	GROUP BY P.content, 
+		P.postId, 
+		P.createdOn, 
+		P.replyToPostId, 
+		U.[name], 
+		I.imageUrl, 
+		U.handle, 
+		UL.userId
 	ORDER BY P.createdOn DESC
 	OFFSET @page * 10 ROWS
 	FETCH FIRST 10 ROWS ONLY
@@ -1012,3 +1024,8 @@ VALUES('https://res.cloudinary.com/dwg1i9w2u/image/upload/v1673400247/item_image
 
 INSERT INTO Chat.PostImage(imageId, postId, aspectRatio)
 VALUES(1, 1, 1.777)
+
+SELECT * 
+FROM Chat.Follower F
+	INNER JOIN Chat.[User] U ON F.followerUserId = U.userId
+WHERE U.userId = 7
