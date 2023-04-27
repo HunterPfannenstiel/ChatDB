@@ -298,8 +298,8 @@ SELECT U.[name] AS userName,
 	I.imageUrl AS userImage,
 	U.userId AS userId,
 	U.bio,
-	Chat.FetchFollowerCount(@userId) AS followerCount,
-	Chat.FetchFollowingCount(@userId) AS followingCount,
+	Chat.FetchFollowerCount(U.userId) AS followerCount,
+	Chat.FetchFollowingCount(U.userId) AS followingCount,
 	Chat.IsUserFollowing(@queryUserId, U.userId) AS isFollowing
 FROM Chat.[User] U 
 	LEFT JOIN Chat.Follower F ON @userId = F.followerUserId
@@ -323,8 +323,8 @@ SELECT U.[name] AS userName,
 	I.imageUrl AS userImage,
 	U.userId AS userId,
 	U.bio,
-	Chat.FetchFollowerCount(@userId) AS followerCount,
-	Chat.FetchFollowingCount(@userId) AS followingCount,
+	Chat.FetchFollowerCount(U.userId) AS followerCount,
+	Chat.FetchFollowingCount(U.userId) AS followingCount,
 	Chat.IsUserFollowing(@queryUserId, U.userId) AS isFollowing
 FROM Chat.[User] U 
 	LEFT JOIN Chat.Follower F ON @userId = F.followedUserId
@@ -692,7 +692,7 @@ AS
 DECLARE @userId INT = (SELECT userId FROM Chat.[User] WHERE handle = @userHandle)
 SELECT U.[name] AS userName,
 	U.bio,
-	I.imageUrl,
+	I.imageUrl AS userImage,
 	COUNT(DISTINCT L.userId) AS likesReceived,
 	COUNT(DISTINCT L2.postId) AS likesGiven,
 	Chat.FetchFollowerCount(@userId) AS followerCount,
@@ -712,7 +712,7 @@ GROUP BY U.[name], bio, imageUrl
 GO
 
 CREATE OR ALTER PROCEDURE Chat.FetchMostActiveUsers
-	@queryUserId INT
+	@queryUserId INT = 0
 AS
 DECLARE @currentDate DATETIMEOFFSET = SYSDATETIMEOFFSET(); 
 DECLARE @previousDate DATETIMEOFFSET = DATEADD(DAY, -7, @currentDate);
@@ -731,13 +731,20 @@ WITH cte_AggregateActivity(userId, postsMade, usersFollowed, likesGiven) AS (
 	GROUP BY U.userId
 )
 SELECT TOP 10
-	U.userId,
+	U.[name] AS userName,
+		U.userId,
+		U.handle AS userHandle,
+		I.imageUrl AS userImage,
+		U.bio,
+		Chat.FetchFollowingCount(U.userId) AS followingCount,
+		Chat.FetchFollowerCount(U.userId) AS followerCount,
 	Chat.IsUserFollowing(@queryUserId, U.userId) AS isFollowing,
 	SUM((C.postsMade * .70) + (C.usersFollowed * .20) + (C.likesGiven * .1)) AS activityWeight
 FROM Chat.[User] U
 	INNER JOIN cte_AggregateActivity C ON U.userId = C.userId
+	JOIN Chat.[Image] I ON I.imageId = U.imageId
 WHERE U.createdDate BETWEEN DATEADD(DAY, -7, @currentDate) AND @currentDate
-GROUP BY U.userId
+GROUP BY U.userId, U.[name], U.userId, U.handle, I.imageUrl, U.bio
 ORDER BY activityWeight DESC
 GO
 
@@ -912,8 +919,8 @@ RETURN
 		INNER JOIN Chat.[Image] I ON U.imageId = I.imageId
 	WHERE U.handle LIKE '%' + @filter + '%' AND U.createdDate <= @createdDateTime
 	ORDER BY followerCount DESC
-	OFFSET @page * 10 ROWS
-	FETCH FIRST 10 ROWS ONLY
+	OFFSET @page * 11 ROWS
+	FETCH FIRST 11 ROWS ONLY
 GO
 
 --Types
