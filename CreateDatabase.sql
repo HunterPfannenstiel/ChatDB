@@ -617,7 +617,7 @@ SELECT U.name AS userName, U.handle AS userHandle, I.imageUrl AS userImage, P.po
 	P.content, 
 	P.createdOn,
 	Chat.IsUserFollowing(@queryUserId, @userId) AS isFollowing,
-	COUNT(DISTINCT L.userId) AS likeCount, 
+	COUNT(DISTINCT L3.userId) AS likeCount, 
 	COUNT(DISTINCT P2.postId) AS commentCount,
     JSON_QUERY(Chat.FetchImages(P.postId)) AS images,
     IIF(L2.userId IS NOT NULL, 1, 0) AS isLiked
@@ -626,6 +626,7 @@ FROM Chat.Post P
 	LEFT JOIN Chat.Post P2 ON P.postId = P2.replyToPostId
 	LEFT JOIN Chat.[Like] L2 ON P.postId = L2.postId
 		AND L2.userId = @queryUserId
+	LEFT JOIN Chat.[Like] L3 ON P.postId = L3.postId
 	JOIN Chat.[User] U ON U.userId = P.userId
 	JOIN Chat.[Image] I ON I.imageId = U.imageId
 WHERE P.createdOn <= @createdDateTime AND L.userId = @userId
@@ -1024,3 +1025,7 @@ VALUES('https://res.cloudinary.com/dwg1i9w2u/image/upload/v1673400247/item_image
 
 INSERT INTO Chat.PostImage(imageId, postId, aspectRatio)
 VALUES(1, 1, 1.777)
+
+UPDATE Chat.Post 
+SET content = N'Hello, its monkey mike!'
+WHERE postId = 617
