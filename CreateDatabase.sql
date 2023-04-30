@@ -101,6 +101,9 @@ CREATE TABLE Chat.Post
 	createdOn DATETIMEOFFSET NOT NULL DEFAULT SYSDATETIMEOFFSET(),
 )
 
+CREATE INDEX Post_CreatedOn
+ON Chat.Post (createdOn)
+
 CREATE TABLE Chat.PostImage
 (
 	imageId INT FOREIGN KEY
@@ -601,7 +604,7 @@ FROM Chat.Post P
 		AND L2.userId = @queryUserId
 WHERE P.userId = @userId AND P.replyToPostId IS NULL AND P.createdOn <= @createdDateTime
 GROUP BY P.postId, P.content, P.createdOn, L2.userId, P.replyToPostId
-ORDER BY P.createdOn DESC
+ORDER BY P.createdOn DESC, P.postId DESC
 OFFSET @page * 10 ROWS
 FETCH NEXT 10 ROWS ONLY
 GO
@@ -633,7 +636,7 @@ FROM Chat.Post P
 	JOIN Chat.[Image] I ON I.imageId = U.imageId
 WHERE P.createdOn <= @createdDateTime AND L.userId = @userId
 GROUP BY P.postId, P.content, P.createdOn, L2.userId, U.name, U.handle, I.imageUrl, P.replyToPostId
-ORDER BY P.createdOn DESC
+ORDER BY P.createdOn DESC, P.postId DESC
 OFFSET @page * 10 ROWS
 FETCH NEXT 10 ROWS ONLY
 GO
@@ -662,7 +665,7 @@ FROM Chat.Post P
 		AND L2.userId = @queryUserId
 WHERE P.createdOn <= @createdDateTime AND P.userId = @userId AND P.replyToPostId IS NOT NULL
 GROUP BY P.postId, P.content, P.createdOn, L2.userId, P.replyToPostId
-ORDER BY P.createdOn DESC
+ORDER BY P.createdOn DESC, P.postId DESC
 OFFSET @page * 10 ROWS
 FETCH NEXT 10 ROWS ONLY
 GO
@@ -696,6 +699,7 @@ AS
 DECLARE @userId INT = (SELECT userId FROM Chat.[User] WHERE handle = @userHandle)
 SELECT U.[name] AS userName,
 	U.bio,
+	@userId AS userId,
 	I.imageUrl AS userImage,
 	COUNT(DISTINCT L.userId) AS likesReceived,
 	COUNT(DISTINCT L2.postId) AS likesGiven,
@@ -798,7 +802,7 @@ RETURN
 			AND P.postId = L2.postId
 	WHERE P.createdOn <= @createdDateTime AND P.replyToPostId = @postId
 	GROUP BY U.[name], U.handle, I.imageUrl, P.postId, P.content, L2.userId, P.createdOn
-	ORDER BY P.createdOn DESC
+	ORDER BY P.createdOn DESC, P.postId DESC
 	OFFSET @page * 15 ROWS FETCH NEXT 15 ROWS ONLY
 GO
 
@@ -853,7 +857,7 @@ RETURN(
 		AND P.createdOn <= @createdDateTime
 		AND P.replyToPostId IS NULL
 	GROUP BY P.content, P.postId, P.createdOn, P.replyToPostId, U.[name], I.imageUrl, U.handle, IIF(UL.userId IS NOT NULL, 1, 0)
-	ORDER BY P.createdOn DESC
+	ORDER BY P.createdOn DESC, P.postId DESC
 	OFFSET @page * 10 ROWS
 	FETCH FIRST 10 ROWS ONLY
 )
@@ -894,7 +898,7 @@ RETURN(
 		I.imageUrl, 
 		U.handle, 
 		UL.userId
-	ORDER BY P.createdOn DESC
+	ORDER BY P.createdOn DESC, P.postId DESC
 	OFFSET @page * 10 ROWS
 	FETCH FIRST 10 ROWS ONLY
 )
