@@ -589,6 +589,7 @@ SELECT P.postId,
 	P.content, 
 	P.createdOn,
 	Chat.IsUserFollowing(@queryUserId, @userId) AS isFollowing,
+	P.replyToPostId,
 	COUNT(DISTINCT L.userId) AS likeCount, 
 	COUNT(DISTINCT P2.postId) AS commentCount,
     JSON_QUERY(Chat.FetchImages(P.postId)) AS images,
@@ -599,7 +600,7 @@ FROM Chat.Post P
 	LEFT JOIN Chat.[Like] L2 ON P.postId = L2.postId
 		AND L2.userId = @queryUserId
 WHERE P.userId = @userId AND P.replyToPostId IS NULL AND P.createdOn <= @createdDateTime
-GROUP BY P.postId, P.content, P.createdOn, L2.userId
+GROUP BY P.postId, P.content, P.createdOn, L2.userId, P.replyToPostId
 ORDER BY P.createdOn DESC
 OFFSET @page * 10 ROWS
 FETCH NEXT 10 ROWS ONLY
@@ -617,6 +618,7 @@ SELECT U.name AS userName, U.handle AS userHandle, I.imageUrl AS userImage, P.po
 	P.content, 
 	P.createdOn,
 	Chat.IsUserFollowing(@queryUserId, @userId) AS isFollowing,
+	P.replyToPostId,
 	COUNT(DISTINCT L3.userId) AS likeCount, 
 	COUNT(DISTINCT P2.postId) AS commentCount,
     JSON_QUERY(Chat.FetchImages(P.postId)) AS images,
@@ -630,7 +632,7 @@ FROM Chat.Post P
 	JOIN Chat.[User] U ON U.userId = P.userId
 	JOIN Chat.[Image] I ON I.imageId = U.imageId
 WHERE P.createdOn <= @createdDateTime AND L.userId = @userId
-GROUP BY P.postId, P.content, P.createdOn, L2.userId, U.name, U.handle, I.imageUrl
+GROUP BY P.postId, P.content, P.createdOn, L2.userId, U.name, U.handle, I.imageUrl, P.replyToPostId
 ORDER BY P.createdOn DESC
 OFFSET @page * 10 ROWS
 FETCH NEXT 10 ROWS ONLY
@@ -648,6 +650,7 @@ SELECT P.postId,
 	P.content, 
 	P.createdOn,
 	Chat.IsUserFollowing(@queryUserId, @userId) AS isFollowing,
+	P.replyToPostId,
 	COUNT(DISTINCT L.userId) AS likeCount, 
 	COUNT(DISTINCT P2.postId) AS commentCount,
     JSON_QUERY(Chat.FetchImages(P.postId)) AS images,
@@ -658,7 +661,7 @@ FROM Chat.Post P
 	LEFT JOIN Chat.[Like] L2 ON P.postId = L2.postId
 		AND L2.userId = @queryUserId
 WHERE P.createdOn <= @createdDateTime AND P.userId = @userId AND P.replyToPostId IS NOT NULL
-GROUP BY P.postId, P.content, P.createdOn, L2.userId
+GROUP BY P.postId, P.content, P.createdOn, L2.userId, P.replyToPostId
 ORDER BY P.createdOn DESC
 OFFSET @page * 10 ROWS
 FETCH NEXT 10 ROWS ONLY
@@ -811,6 +814,7 @@ RETURN
 		I.imageUrl AS userImage,
 		P.postId,
 		P.content,
+		P.replyToPostId,
 		COUNT(DISTINCT L.userId) AS likeCount,
 		COUNT(DISTINCT P2.postId) AS commentCount,
 		JSON_QUERY(Chat.FetchImages(P.postId)) AS images,
@@ -824,7 +828,7 @@ RETURN
 		LEFT JOIN Chat.[Like] L2 ON @userId = L2.userId
 			AND P.postId = L2.postId
 	WHERE P.postId = @postId
-	GROUP BY U.[name], U.handle, I.imageUrl, P.postId, P.content, L2.userId, P.createdOn
+	GROUP BY U.[name], U.handle, I.imageUrl, P.postId, P.content, L2.userId, P.createdOn, P.replyToPostId
 GO
 
 CREATE OR ALTER FUNCTION Chat.FetchFeedPage (
@@ -847,6 +851,7 @@ RETURN(
 	JOIN Chat.[Image] I ON I.imageId = U.imageId
 	WHERE F.followerUserId = @userId
 		AND P.createdOn <= @createdDateTime
+		AND P.replyToPostId IS NULL
 	GROUP BY P.content, P.postId, P.createdOn, P.replyToPostId, U.[name], I.imageUrl, U.handle, IIF(UL.userId IS NOT NULL, 1, 0)
 	ORDER BY P.createdOn DESC
 	OFFSET @page * 10 ROWS
@@ -880,6 +885,7 @@ RETURN(
 	JOIN Chat.[User] U ON U.userId = P.userId
 	JOIN Chat.[Image] I ON I.imageId = U.imageId
 	WHERE P.createdOn <= @createdDateTime
+		AND P.replyToPostId IS NULL
 	GROUP BY P.content, 
 		P.postId, 
 		P.createdOn, 
@@ -952,80 +958,3 @@ CREATE TYPE FEED_IMAGE AS TABLE (
 	aspectRatio NUMERIC(5, 3)
 )
 GO
-
---Data initialization
-	--User Images
-INSERT INTO Chat.[Image](imageUrl, publicId)
-VALUES('https://res.cloudinary.com/dwg1i9w2u/image/upload/v1673400003/item_images/tjah32egdkq8idarjgkd.png', '123'),
-('https://res.cloudinary.com/dwg1i9w2u/image/upload/v1673400244/item_images/fgvymicizcsmmwqgbgyh.png', '124'),
-('https://res.cloudinary.com/dwg1i9w2u/image/upload/v1680569645/profile-images/jemgr7rpgs9v7wtkyscg.png', '125'),
-('https://res.cloudinary.com/dwg1i9w2u/image/upload/v1681089807/profile-images/mofjwd7zjrj9hvd4wngm.jpg', '126'),
-('https://res.cloudinary.com/dwg1i9w2u/image/upload/v1673400258/item_images/hvptjhpyprv1xe1egio5.png', '127'),
-('https://res.cloudinary.com/dwg1i9w2u/image/upload/v1673400263/item_images/qcbl4s4wet0ift8kxyfj.png', '128');
-
-	--Users
-INSERT INTO Chat.[User](name, handle, ethereumAddress, imageId, bio) VALUES ('fartis0', 'kscogings0', '0x405a59640c0aa2b46d0eb42d949f3ae571c385db', 1, 'Wuhan Transportation University')
-INSERT INTO Chat.[User](name, handle, email, imageId, bio) VALUES ('garkill1', 'rhyams1', 'gdyne1@shinystat.com', 2, 'Pace University')
-INSERT INTO Chat.[User](name, handle, ethereumAddress, imageId, bio) VALUES ('njarmain2', 'edelaperrelle2', '0x3848cc6af7eb069b26f479b3d1d140f94ad2438b', 3, 'Universidad Nicaragüense de Ciencia y Tecnológica')
-INSERT INTO Chat.[User](name, handle, email, imageId, bio) VALUES ('cswenson3', 'nesp3', 'gbeaument3@berkeley.edu', 4, 'Creighton University')
-INSERT INTO Chat.[User](name, handle, email, imageId, bio) VALUES ('gellams5', 'czarfati5', 'bburress5@photobucket.com', 6, 'Arizona Christian University')
-INSERT INTO Chat.[User](name, handle, email, imageId, bio) VALUES ('gellams5', 't', 'hunterstatek@gmail.com', 6, 'Arizona Christian University')
-INSERT INTO Chat.[User](name, handle, email, imageId, bio) VALUES ('admin', 'admin', 'pfannenstielpayton@gmail.com', 5, ':O')
-
-
-	--UserPosts
-INSERT INTO Chat.Post (userId, content)
-VALUES (1, 'quisque ut erat curabitur gravida nisi at nibh in hac habitasse platea dictumst'),
-(1, 'ante ipsum primis in faucibus orci luctus et ultrices posuere cubilia curae donec pharetra magna vestibulum aliquet ultrices erat'),
-(1, 'vestibulum quam sapien varius ut blandit non interdum in ante vestibulum ante ipsum primis in faucibus orci luctus'),
-(1, 'eget nunc donec quis orci eget orci vehicula condimentum curabitur'),
-(2, 'blandit mi in porttitor pede justo eu massa donec dapibus duis at velit eu est congue elementum'),
-(2, 'in faucibus orci luctus et ultrices posuere cubilia curae nulla dapibus'),
-(2, 'vulputate vitae nisl aenean lectus pellentesque eget nunc donec quis orci eget orci vehicula condimentum curabitur in libero'),
-(2, 'imperdiet sapien urna pretium nisl ut volutpat sapien arcu sed augue aliquam erat volutpat in congue'),
-(2, 'odio elementum eu interdum eu tincidunt in leo maecenas pulvinar lobortis est phasellus sit amet erat'),
-(3, 'vitae nisi nam ultrices libero non mattis pulvinar nulla pede ullamcorper augue a suscipit nulla'),
-(3, 'hac habitasse platea dictumst maecenas ut massa quis augue luctus tincidunt nulla mollis molestie lorem quisque ut erat curabitur gravida'),
-(3, 'ultrices vel augue vestibulum ante ipsum primis in faucibus orci luctus et'),
-(3, 'enim lorem ipsum dolor sit amet consectetuer adipiscing elit proin interdum'),
-(4, 'sapien cum sociis natoque penatibus et magnis dis parturient montes nascetur ridiculus mus etiam vel augue vestibulum rutrum'),
-(4, 'porta volutpat quam pede lobortis ligula sit amet eleifend pede libero quis'),
-(5, 'pede ullamcorper augue a suscipit nulla elit ac nulla sed vel enim sit amet nunc viverra dapibus nulla suscipit ligula'),
-(5, 'eu tincidunt in leo maecenas pulvinar lobortis est phasellus sit amet erat nulla tempus vivamus in felis eu sapien'),
-(5, 'risus semper porta volutpat quam pede lobortis ligula sit amet eleifend pede libero quis orci nullam molestie nibh'),
-(6, 'curae nulla dapibus dolor vel est donec odio justo sollicitudin ut suscipit a feugiat et eros'),
-(6, 'vestibulum sed magna at nunc commodo placerat praesent blandit nam');
-
-	--Post Comments
-INSERT Chat.Post (userId, content, replyToPostId)
-VALUES (1, 'quisque ut erat curabitur gravida nisi at nibh in hac habitasse platea dictumst', 1),
-(1, 'ante ipsum primis in faucibus orci luctus et ultrices posuere cubilia curae donec pharetra magna vestibulum aliquet ultrices erat', 1),
-(1, 'ante ipsum primis in faucibus orci luctus et ultrices posuere cubilia curae donec pharetra magna vestibulum aliquet ultrices erat', 1)
-
-	--Comments to comments
-DECLARE @PostComment INT = @@IDENTITY
-INSERT Chat.Post (userId, content, replyToPostId)
-VALUES (1, 'vestibulum quam sapien varius ut blandit non interdum in ante vestibulum ante ipsum primis in faucibus orci luctus', @PostComment),
-(1, 'eget nunc donec quis orci eget orci vehicula condimentum curabitur', @PostComment),
-(2, 'blandit mi in porttitor pede justo eu massa donec dapibus duis at velit eu est congue elementum', 1),
-(2, 'in faucibus orci luctus et ultrices posuere cubilia curae nulla dapibus', @PostComment),
-(2, 'vulputate vitae nisl aenean lectus pellentesque eget nunc donec quis orci eget orci vehicula condimentum curabitur in libero', @PostComment),
-(2, 'imperdiet sapien urna pretium nisl ut volutpat sapien arcu sed augue aliquam erat volutpat in congue', @PostComment);
-
-	--Post Likes
-INSERT INTO Chat.[Like](postId, userId)
-VALUES(1, 2), (1, 3), (1, 4), (2, 2), (2, 3), (10, 2), (10, 1), (10, 4), (@PostComment, 1), (@PostComment, 2), (1, 1)
-
-	--Followers
-INSERT INTO Chat.Follower(followedUserId, followerUserId)
-VALUES(1, 2), (2, 1), (1, 3), (3, 1), (5, 6)
-	--Post Image
-INSERT INTO Chat.[Image](imageUrl, publicId)
-VALUES('https://res.cloudinary.com/dwg1i9w2u/image/upload/v1673400247/item_images/pihzt8aa2r2fo3va0yfx.png', N'543')
-
-INSERT INTO Chat.PostImage(imageId, postId, aspectRatio)
-VALUES(1, 1, 1.777)
-
-UPDATE Chat.Post 
-SET content = N'Hello, its monkey mike!'
-WHERE postId = 617
